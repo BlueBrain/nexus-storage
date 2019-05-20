@@ -1,0 +1,9 @@
+-Dfile.encoding=UTF8
+-Xms2G
+-Xmx4G
+-Xss16m
+-XX:ReservedCodeCacheSize=350M
+-XX:+TieredCompilation
+-XX:+UseG1GC
+-XX:MaxMetaspaceSize=2G
+-XX:-UseGCOverheadLimit
