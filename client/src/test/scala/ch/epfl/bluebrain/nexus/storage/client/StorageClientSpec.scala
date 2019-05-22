@@ -22,11 +22,10 @@ import ch.epfl.bluebrain.nexus.rdf.syntax._
 import ch.epfl.bluebrain.nexus.storage.client.StorageClient.AkkaSource
 import ch.epfl.bluebrain.nexus.storage.client.StorageClientError._
 import ch.epfl.bluebrain.nexus.storage.client.config.StorageClientConfig
-import ch.epfl.bluebrain.nexus.storage.client.types.{FileAttributes, ServiceDescription}
 import ch.epfl.bluebrain.nexus.storage.client.types.FileAttributes.Digest
+import ch.epfl.bluebrain.nexus.storage.client.types.{FileAttributes, ServiceDescription}
 import io.circe.Json
-import org.mockito.Mockito
-import org.mockito.integrations.scalatest.IdiomaticMockitoFixture
+import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
 import org.scalatest._
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
@@ -40,7 +39,8 @@ class StorageClientSpec
     with Matchers
     with ScalaFutures
     with BeforeAndAfter
-    with IdiomaticMockitoFixture
+    with IdiomaticMockito
+    with ArgumentMatchersSugar
     with Randomness
     with IOOptionValues
     with EitherValues
@@ -87,8 +87,6 @@ class StorageClientSpec
 
   private def sourceInChunks(input: String): AkkaSource =
     Source.fromIterator(() ⇒ input.grouped(10000).map(ByteString(_)))
-
-  private def matchesArg[A](f: A => Boolean): A = argThat((argument: A) => f(argument))
 
   private def consume(source: AkkaSource): String =
     source.runFold("")(_ ++ _.utf8String).futureValue
@@ -156,12 +154,11 @@ class StorageClientSpec
 
     "creating a file" should {
 
-      def matches(req: HttpRequest) = matchesArg[HttpRequest] { other =>
-        other == null || (other.copy(entity = req.entity) == req &&
-        removeDelimiters(consume(other.entity.dataBytes)) == removeDelimiters(consume(req.entity.dataBytes)))
-      }
-
       "return the file attributes" in new Ctx {
+        def matches(req: HttpRequest) = argThat[HttpRequest] { other: HttpRequest =>
+          other == null || (other.copy(entity = req.entity) == req &&
+          removeDelimiters(consume(other.entity.dataBytes)) == removeDelimiters(consume(req.entity.dataBytes)))
+        }
         val fileAttr =
           FileAttributes(s"file:///root/one/two", 12L, Digest("SHA-256", genString()))
         attributesClient(matches(createFile(name, path, source, "two"))) shouldReturn
@@ -170,6 +167,10 @@ class StorageClientSpec
       }
 
       "propagate the underlying exception" in new Ctx {
+        def matches(req: HttpRequest) = argThat[HttpRequest] { other: HttpRequest =>
+          other == null || (other.copy(entity = req.entity) == req &&
+          removeDelimiters(consume(other.entity.dataBytes)) == removeDelimiters(consume(req.entity.dataBytes)))
+        }
         forAll(exs) { ex =>
           attributesClient(matches(createFile(name, path, source, "two"))) shouldReturn
             IO.raiseError(ex)
