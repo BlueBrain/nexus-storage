@@ -33,6 +33,7 @@ pipeline {
                 }
             }
         }
+
         stage("Build & Publish Artifacts") {
             when {
                 expression { !isPR }
@@ -43,6 +44,7 @@ pipeline {
                 stash name: "service", includes: "target/universal/storage-*.tgz"
             }
         }
+
         stage("Build Image") {
             when {
                 expression { !isPR }
@@ -53,6 +55,7 @@ pipeline {
                 sh "oc start-build storage-build --from-file=storage.tgz --wait"
             }
         }
+
         stage("Redeploy & Test") {
             when {
                 expression { !isPR && !isRelease }
@@ -65,6 +68,7 @@ pipeline {
                 build job: 'nexus/nexus-tests/master', parameters: [booleanParam(name: 'run', value: true)], wait: true
             }
         }
+
         stage("Tag Images") {
             when {
                 expression { isRelease }
@@ -73,6 +77,7 @@ pipeline {
                 openshiftTag srcStream: 'storage', srcTag: 'latest', destStream: 'storage', destTag: version.substring(1), verbose: 'false'
             }
         }
+
         stage("Push to Docker Hub") {
             when {
                 expression { isRelease }
@@ -83,6 +88,7 @@ pipeline {
                 sh "oc start-build nexus-storage-build --from-file=storage.tgz --wait"
             }
         }
+
         stage("Report Coverage") {
             when {
                 expression { !isPR }
