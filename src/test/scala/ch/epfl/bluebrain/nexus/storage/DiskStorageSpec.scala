@@ -219,11 +219,12 @@ class DiskStorageSpec
         val content      = "some content"
         Files.write(absoluteFile, content.getBytes(StandardCharsets.UTF_8))
 
-        val result = storage.moveFile[IO](name, Uri.Path(dir), Uri.Path("some/other")).accepted
-        result shouldEqual FileAttributes(s"file://${basePath.resolve("some/other")}", 96L, result.digest)
+        val result      = storage.moveFile[IO](name, Uri.Path(dir), Uri.Path("some/other")).accepted
+        val resolvedDir = basePath.resolve("some/other")
+        result shouldEqual FileAttributes(s"file://$resolvedDir", Files.size(resolvedDir), result.digest)
         Files.exists(absoluteDir) shouldEqual false
         Files.exists(absoluteFile) shouldEqual false
-        Files.exists(basePath.resolve("some/other")) shouldEqual true
+        Files.exists(resolvedDir) shouldEqual true
         Files.exists(basePath.resolve("some/other/myfile.txt")) shouldEqual true
       }
     }
