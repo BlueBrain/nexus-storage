@@ -40,6 +40,8 @@ class StorageClient[F[_]] private[client] (
     emptyBody: HttpClient[F, NotUsed]
 )(implicit F: Effect[F], ec: ExecutionContext) {
 
+  private val emptyChunk = "An HttpEntity.Chunk must have non-empty data"
+
   def serviceDescription: F[ServiceDescription] =
     serviceDesc(Get(config.iri.toAkkaUri))
 
@@ -69,7 +71,11 @@ class StorageClient[F[_]] private[client] (
     val bodyPartEntity = HttpEntity.IndefiniteLength(ContentTypes.`application/octet-stream`, source)
     val filename       = extractName(relativePath).getOrElse("myfile")
     val multipartForm  = FormData(BodyPart("file", bodyPartEntity, Map("filename" -> filename))).toEntity()
-    attributes(Put(endpoint.toAkkaUri, multipartForm).withCredentials)
+    attributes(Put(endpoint.toAkkaUri, multipartForm).withCredentials).recoverWith {
+      case ex: IllegalArgumentException if ex.getMessage != null && ex.getMessage.endsWith(emptyChunk) =>
+        createFile(name, relativePath, Source.empty)
+      case ex => F.raiseError(ex)
+    }
   }
 
   private def extractName(path: Uri.Path): Option[String] =

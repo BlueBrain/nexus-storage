@@ -34,10 +34,10 @@ val catsEffectVersion     = "1.3.1"
 val circeVersion          = "0.11.1"
 val commonsVersion        = "0.12.10"
 val iamVersion            = "619ba457"
-val mockitoVersion        = "1.5.7"
+val mockitoVersion        = "1.5.11"
 val monixVersion          = "3.0.0-RC2"
-val pureconfigVersion     = "0.11.0"
-val scalaTestVersion      = "3.0.7"
+val pureconfigVersion     = "0.11.1"
+val scalaTestVersion      = "3.0.8"
 
 // Dependencies modules
 lazy val akkaHttp        = "com.typesafe.akka"       %% "akka-http"                % akkaHttpVersion
