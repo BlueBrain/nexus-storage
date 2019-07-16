@@ -7,6 +7,7 @@ import ch.epfl.bluebrain.nexus.storage.config.AppConfig.Description
 import ch.epfl.bluebrain.nexus.storage.routes.AppInfoRoutes.ServiceDescription
 import ch.epfl.bluebrain.nexus.storage.routes.instances._
 import io.circe.generic.auto._
+import kamon.instrumentation.akka.http.TracingDirectives.operationName
 
 /**
   * Akka HTTP route definition for service description
@@ -15,7 +16,9 @@ class AppInfoRoutes(serviceDescription: ServiceDescription) {
 
   def routes: Route = concat(
     (get & pathEndOrSingleSlash) {
-      complete(OK -> serviceDescription)
+      operationName("/") {
+        complete(OK -> serviceDescription)
+      }
     }
   )
 }

@@ -6,7 +6,8 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.model.{ContentType, HttpEntity, Uri}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import ch.epfl.bluebrain.nexus.storage.config.AppConfig.tracing._
+import ch.epfl.bluebrain.nexus.storage.config.AppConfig
+import ch.epfl.bluebrain.nexus.storage.config.AppConfig.HttpConfig
 import ch.epfl.bluebrain.nexus.storage.routes.StorageDirectives._
 import ch.epfl.bluebrain.nexus.storage.routes.StorageRoutes.LinkFile
 import ch.epfl.bluebrain.nexus.storage.routes.StorageRoutes.LinkFile._
@@ -14,57 +15,64 @@ import ch.epfl.bluebrain.nexus.storage.routes.instances._
 import ch.epfl.bluebrain.nexus.storage.{AkkaSource, Storages}
 import io.circe.generic.semiauto._
 import io.circe.{Decoder, Encoder}
+import kamon.instrumentation.akka.http.TracingDirectives.operationName
 import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
 
-class StorageRoutes(implicit storages: Storages[AkkaSource]) {
+class StorageRoutes()(implicit storages: Storages[AkkaSource], hc: HttpConfig) {
 
   def routes: Route =
     // Consume buckets/{name}/
-    (pathPrefix("buckets") & pathPrefix(Segment)) { name =>
-      bucketExists(name).apply { implicit bucketExistsEvidence =>
-        concat(
-          // Check bucket
-          (head & trace("check bucket")) {
-            complete(OK)
-          },
-          // Consume files
-          pathPrefix("files") {
-            concat(
-              // consume path
-              (put & extractRelativeFilePath(name)) { relativePath =>
-                pathNotExists(name, relativePath).apply { implicit pathNotExistEvidence =>
-                  // Upload file
-                  (fileUpload("file") & trace("create file")) {
-                    case (_, source) =>
-                      complete(Created -> storages.createFile[Task](name, relativePath, source).runToFuture)
-                  }
-                }
-              },
-              // consume path
-              (put & extractRelativePath(name)) { destRelativePath =>
-                // Link file/dir
-                (entity(as[LinkFile]) & trace("link file")) {
-                  case LinkFile(source) =>
-                    validatePath(name, source) {
-                      complete(storages.moveFile[Task](name, source, destRelativePath).runWithStatus(OK))
-                    }
-                }
-              },
-              // Get file
-              (get & extractRelativePath(name)) { relativePath =>
-                (pathExists(name, relativePath) & trace("fetch file")) { implicit pathExistsEvidence =>
-                  storages.getFile(name, relativePath) match {
-                    case Right((source, Some(filename))) => sourceEntity(source, `application/octet-stream`, filename)
-                    case Right((source, None))           => sourceEntity(source, `application/gnutar`, s"dir-$name.tgz")
-                    case Left(err)                       => complete(err)
-                  }
-                }
-              }
-            )
+    pathPrefix("buckets" / Segment) { name =>
+      concat(
+        // Check bucket
+        (head & pathEndOrSingleSlash) {
+          operationName(s"/${hc.prefix}/buckets/{}") {
+            bucketExists(name).apply { _ =>
+              complete(OK)
+            }
           }
-        )
-      }
+        },
+        // Consume files
+        (pathPrefix("files") & extractRelativePath(name)) { relativePath =>
+          operationName(s"/${hc.prefix}/buckets/{}/files/{}") {
+            bucketExists(name).apply {
+              implicit bucketExistsEvidence =>
+                concat(
+                  put {
+                    pathNotExists(name, relativePath).apply { implicit pathNotExistEvidence =>
+                      // Upload file
+                      fileUpload("file") {
+                        case (_, source) =>
+                          complete(Created -> storages.createFile[Task](name, relativePath, source).runToFuture)
+                      }
+                    }
+                  },
+                  put {
+                    // Link file/dir
+                    entity(as[LinkFile]) {
+                      case LinkFile(source) =>
+                        validatePath(name, source) {
+                          complete(storages.moveFile[Task](name, source, relativePath).runWithStatus(OK))
+                        }
+                    }
+                  },
+                  // Get file
+                  get {
+                    pathExists(name, relativePath).apply { implicit pathExistsEvidence =>
+                      storages.getFile(name, relativePath) match {
+                        case Right((source, Some(filename))) =>
+                          sourceEntity(source, `application/octet-stream`, filename)
+                        case Right((source, None)) => sourceEntity(source, `application/gnutar`, s"dir-$name.tgz")
+                        case Left(err)             => complete(err)
+                      }
+                    }
+                  }
+                )
+            }
+          }
+        }
+      )
     }
 
   private def sourceEntity(source: AkkaSource, contentType: ContentType, filename: String): Route =
@@ -88,6 +96,6 @@ object StorageRoutes {
     implicit val linkFileEnc: Encoder[LinkFile] = deriveEncoder[LinkFile]
   }
 
-  final def apply(storages: Storages[AkkaSource]): StorageRoutes =
-    new StorageRoutes()(storages)
+  final def apply(storages: Storages[AkkaSource])(implicit cfg: AppConfig): StorageRoutes =
+    new StorageRoutes()(storages, cfg.http)
 }

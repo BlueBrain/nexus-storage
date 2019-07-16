@@ -15,7 +15,7 @@ import ch.epfl.bluebrain.nexus.storage.config.AppConfig._
 import ch.epfl.bluebrain.nexus.storage.routes.Routes
 import com.typesafe.config.{Config, ConfigFactory}
 import kamon.Kamon
-import kamon.system.SystemMetrics
+import kamon.bundle.Bundle
 import monix.eval.Task
 import monix.execution.Scheduler
 
@@ -36,9 +36,9 @@ object Main {
   }
 
   def setupMonitoring(config: Config): Unit = {
+    Bundle.attach()
     Kamon.reconfigure(config)
-    SystemMetrics.startCollecting()
-    Kamon.loadReportersFromConfig()
+    Kamon.loadModules()
   }
 
   @SuppressWarnings(Array("UnusedMethodParameter"))
@@ -73,8 +73,7 @@ object Main {
     }
 
     as.registerOnTermination {
-      Kamon.stopAllReporters()
-      SystemMetrics.stopCollecting()
+      Await.result(Kamon.stopModules(), 10 seconds)
     }
     // attempt to leave the cluster before shutting down
     val _ = sys.addShutdownHook {

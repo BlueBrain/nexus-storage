@@ -4,7 +4,6 @@ import java.nio.file.Path
 
 import akka.http.scaladsl.model.Uri
 import ch.epfl.bluebrain.nexus.commons.http.JsonLdCirceSupport.OrderedKeys
-import ch.epfl.bluebrain.nexus.commons.kamon.directives.TracingDirectives
 import ch.epfl.bluebrain.nexus.iam.client.config.IamClientConfig
 import ch.epfl.bluebrain.nexus.iam.client.types.Identity.{Anonymous, Subject, User}
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig._
@@ -101,6 +100,4 @@ object AppConfig {
       "bytes",
       ""
     ))
-
-  val tracing = new TracingDirectives()
 }
