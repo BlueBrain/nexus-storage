@@ -32,10 +32,10 @@ val alpakkaVersion        = "1.0.2"
 val catsVersion           = "1.6.1"
 val catsEffectVersion     = "1.3.1"
 val circeVersion          = "0.11.1"
-val commonsVersion        = "0.12.10"
+val commonsVersion        = "0.16.0"
 val iamVersion            = "619ba457"
 val mockitoVersion        = "1.5.11"
-val monixVersion          = "3.0.0-RC2"
+val monixVersion          = "3.0.0-RC3"
 val pureconfigVersion     = "0.11.1"
 val scalaTestVersion      = "3.0.8"
 
@@ -50,6 +50,7 @@ lazy val catsCore        = "org.typelevel"           %% "cats-core"             
 lazy val catsEffect      = "org.typelevel"           %% "cats-effect"              % catsEffectVersion
 lazy val circeCore       = "io.circe"                %% "circe-core"               % circeVersion
 lazy val commonsCore     = "ch.epfl.bluebrain.nexus" %% "commons-core"             % commonsVersion
+lazy val commonsKamon    = "ch.epfl.bluebrain.nexus" %% "commons-kamon"            % commonsVersion
 lazy val commonsTest     = "ch.epfl.bluebrain.nexus" %% "commons-test"             % commonsVersion
 lazy val iamClient       = "ch.epfl.bluebrain.nexus" %% "iam-client"               % iamVersion
 lazy val mockito         = "org.mockito"             %% "mockito-scala"            % mockitoVersion
@@ -76,6 +77,7 @@ lazy val storage = project
       catsEffect,
       circeCore,
       commonsCore,
+      commonsKamon,
       iamClient,
       monixEval,
       pureconfig,
@@ -83,7 +85,8 @@ lazy val storage = project
       commonsTest     % Test,
       mockito         % Test,
       scalaTest       % Test
-    )
+    ),
+    resolvers += "bogdanromanx" at "http://dl.bintray.com/bogdanromanx/maven"
   )
 
 lazy val client = project
