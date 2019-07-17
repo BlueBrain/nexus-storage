@@ -44,15 +44,22 @@ object Rejection {
       extends Rejection(
         s"The provided location inside the bucket '$name' with the relative path '$path' does not exist.")
 
-  final case class PathContainsSymlinks(name: String, path: Path)
+  final case class PathContainsLinks(name: String, path: Path)
       extends Rejection(
-        s"The provided location inside the bucket '$name' with the relative path '$path' contains symbolic links. Please remove them in order to proceed with this call.")
+        s"The provided location inside the bucket '$name' with the relative path '$path' contains links. Please remove them in order to proceed with this call.")
+
+  /**
+    *
+    * Signals a missing.
+    * @param name the storage bucket name
+    */
+  final case class EmptyFilename(name: String)
 
   implicit def statusCodeFrom: StatusFrom[Rejection] = StatusFrom {
-    case _: PathContainsSymlinks => StatusCodes.BadRequest
-    case _: PathAlreadyExists    => StatusCodes.Conflict
-    case _: BucketNotFound       => StatusCodes.NotFound
-    case _: PathNotFound         => StatusCodes.NotFound
+    case _: PathContainsLinks => StatusCodes.BadRequest
+    case _: PathAlreadyExists => StatusCodes.Conflict
+    case _: BucketNotFound    => StatusCodes.NotFound
+    case _: PathNotFound      => StatusCodes.NotFound
   }
 
   implicit val rejectionEncoder: Encoder[Rejection] = {

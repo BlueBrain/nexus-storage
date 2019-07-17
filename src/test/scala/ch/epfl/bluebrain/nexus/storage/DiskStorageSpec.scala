@@ -82,14 +82,6 @@ class DiskStorageSpec
         storage.exists(name) shouldBe a[BucketDoesNotExist]
       }
 
-      "fail when bucket directory does not have the write access" in {
-        val name      = genString()
-        val directory = rootPath.resolve(name).resolve(config.protectedDirectory)
-        Files.createDirectories(directory)
-        directory.toFile.setWritable(false)
-        storage.exists(name) shouldBe a[BucketDoesNotExist]
-      }
-
       "fail when the bucket goes out of the scope" in new AbsoluteDirectoryCreated {
         val invalid = List("one/two", "../other", "..", "one/two/three")
         forAll(invalid) {
