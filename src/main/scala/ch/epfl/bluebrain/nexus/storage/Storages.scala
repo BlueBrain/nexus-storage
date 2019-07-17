@@ -12,7 +12,7 @@ import akka.util.ByteString
 import cats.effect.Effect
 import cats.implicits._
 import ch.epfl.bluebrain.nexus.storage.File._
-import ch.epfl.bluebrain.nexus.storage.Rejection.{PathAlreadyExists, PathContainsSymlinks, PathNotFound}
+import ch.epfl.bluebrain.nexus.storage.Rejection.{PathAlreadyExists, PathContainsLinks, PathNotFound}
 import ch.epfl.bluebrain.nexus.storage.StorageError.{InternalError, PathInvalid}
 import ch.epfl.bluebrain.nexus.storage.Storages.PathExistence._
 import ch.epfl.bluebrain.nexus.storage.Storages.BucketExistence._
@@ -22,7 +22,7 @@ import com.github.ghik.silencer.silent
 import java.nio.file.StandardCopyOption._
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
+import scala.util.{Success, Try}
 
 trait Storages[Source] {
 
@@ -114,7 +114,7 @@ object Storages {
     def exists(name: String): BucketExistence = {
       val path = basePath(name)
       if (path.getParent.getParent != config.rootVolume) BucketDoesNotExist
-      else if (Files.isDirectory(path) && Files.isWritable(path) && Files.isReadable(path)) BucketExists
+      else if (Files.isDirectory(path) && Files.isReadable(path)) BucketExists
       else BucketDoesNotExist
     }
 
@@ -173,10 +173,15 @@ object Storages {
           F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
           computeMetadata(sourceF(absDestPath))
 
-      def dirContainsSymbolicLink(path: Path): F[Boolean] =
-        Directory.walk(path).map(Files.isSymbolicLink).takeWhile(_ == false, inclusive = true).runWith(Sink.last).to[F]
+      def dirContainsLink(path: Path): F[Boolean] =
+        Directory
+          .walk(path)
+          .map(p => Files.isSymbolicLink(p) || containsHardLink(p))
+          .takeWhile(_ == false, inclusive = true)
+          .runWith(Sink.last)
+          .to[F]
 
-      if (!Files.exists(absSourcePath) || !Files.isWritable(absSourcePath))
+      if (!Files.exists(absSourcePath))
         F.pure(Left(PathNotFound(name, sourceRelativePath)))
       else if (!absSourcePath.descendantOf(bucketPath) || absSourcePath.descendantOf(bucketProtectedPath))
         F.pure(Left(PathNotFound(name, sourceRelativePath)))
@@ -184,13 +189,13 @@ object Storages {
         F.raiseError(PathInvalid(name, destRelativePath))
       else if (Files.exists(absDestPath))
         F.pure(Left(PathAlreadyExists(name, destRelativePath)))
-      else if (Files.isSymbolicLink(absSourcePath))
-        F.pure(Left(PathContainsSymlinks(name, sourceRelativePath)))
+      else if (Files.isSymbolicLink(absSourcePath) || containsHardLink(absSourcePath))
+        F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
       else if (Files.isRegularFile(absSourcePath))
         moveAndComputeMeta(getFile)
       else if (Files.isDirectory(absSourcePath))
-        dirContainsSymbolicLink(absSourcePath).flatMap {
-          case true  => F.pure(Left(PathContainsSymlinks(name, sourceRelativePath)))
+        dirContainsLink(absSourcePath).flatMap {
+          case true  => F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
           case false => moveAndComputeMeta(getDirectory)
         } else F.pure(Left(PathNotFound(name, sourceRelativePath)))
     }
@@ -206,6 +211,14 @@ object Storages {
 
     private def getDirectory(absPath: Path): AkkaSource = Directory.walk(absPath).via(TarFlow.writer(absPath)).via(gzip)
     private def getFile(absPath: Path): AkkaSource      = FileIO.fromPath(absPath)
+
+    private def containsHardLink(absPath: Path): Boolean =
+      if (Files.isDirectory(absPath)) false
+      else
+        Try(Files.getAttribute(absPath, "unix:nlink").asInstanceOf[Int]) match {
+          case Success(value) => value > 1
+          case _              => false
+        }
 
     private def digestSink(algorithm: String): Sink[ByteString, Future[Digest]] =
       Sink
