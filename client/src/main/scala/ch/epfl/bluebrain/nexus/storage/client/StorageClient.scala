@@ -192,9 +192,9 @@ object StorageClient {
             cl.toString(resp.entity).flatMap { entityAsString =>
               val (tpe, msg) = typeAndReason(entityAsString).getOrElse(("", entityAsString))
               tpe match {
-                case "PathContainsSymlinks" => F.raiseError(InvalidPath(msg))
-                case "PathInvalid"          => F.raiseError(InvalidPath(msg))
-                case "PathAlreadyExists"    => F.raiseError(InvalidPath(msg))
+                case "PathContainsLinks" => F.raiseError(InvalidPath(msg))
+                case "PathInvalid"       => F.raiseError(InvalidPath(msg))
+                case "PathAlreadyExists" => F.raiseError(InvalidPath(msg))
                 case _ =>
                   logger.error(
                     s"Received '${other.value}' when accessing '${req.method.name()} ${req.uri.toString()}', response entity as string: '$msg'")
