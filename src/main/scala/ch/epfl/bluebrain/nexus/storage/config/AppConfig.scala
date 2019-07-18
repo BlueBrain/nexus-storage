@@ -8,6 +8,8 @@ import ch.epfl.bluebrain.nexus.iam.client.config.IamClientConfig
 import ch.epfl.bluebrain.nexus.iam.client.types.Identity.{Anonymous, Subject, User}
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig._
 
+import scala.concurrent.duration.FiniteDuration
+
 /**
   * Application configuration
   *
@@ -16,12 +18,14 @@ import ch.epfl.bluebrain.nexus.storage.config.AppConfig._
   * @param storage     storages configuration
   * @param subject     allowed subject to perform calls to this service
   * @param iam         iam client configuration
+  * @param digest      the digest configuration
   */
 final case class AppConfig(description: Description,
                            http: HttpConfig,
                            storage: StorageConfig,
                            subject: SubjectConfig,
-                           iam: IamClientConfig)
+                           iam: IamClientConfig,
+                           digest: DigestConfig)
 
 object AppConfig {
 
@@ -59,9 +63,8 @@ object AppConfig {
     *
     * @param rootVolume         the base [[Path]] where the files are stored
     * @param protectedDirectory the relative [[Path]] of the protected directory once the storage bucket is selected
-    * @param algorithm          the storage file algorithm
     */
-  final case class StorageConfig(rootVolume: Path, protectedDirectory: Path, algorithm: String)
+  final case class StorageConfig(rootVolume: Path, protectedDirectory: Path)
 
   /**
     * Allowed subject to perform calls to this service
@@ -71,6 +74,7 @@ object AppConfig {
     * @param name      the user name. It must be present when anonymous = false and it must be removed when anonymous = true
     */
   final case class SubjectConfig(anonymous: Boolean, realm: Option[String], name: Option[String]) {
+    // $COVERAGE-OFF$
     val subjectValue: Subject = (anonymous, realm, name) match {
       case (false, Some(r), Some(s)) => User(s, r)
       case (false, _, _) =>
@@ -81,11 +85,28 @@ object AppConfig {
         throw new IllegalArgumentException(
           "subject configuration is wrong. When anonymous is set to true, a realm and a subject should not be present")
     }
+    // $COVERAGE-ON$
   }
+
+  /**
+    * The digest configuration.
+    *
+    * @param algorithm              the digest algorithm
+    * @param maxInMemory            the maximum number of algorithms stored in memory
+    * @param concurrentComputations the maximum number of concurrent computations of digest
+    * @param maxInQueue             the maximum number of computations in queue to be computed
+    * @param retriggerAfter         the amout of time after a digest which is still in the queue to be computed can be retrigger
+    */
+  final case class DigestConfig(algorithm: String,
+                                maxInMemory: Long,
+                                concurrentComputations: Int,
+                                maxInQueue: Int,
+                                retriggerAfter: FiniteDuration)
 
   implicit def toStorage(implicit config: AppConfig): StorageConfig = config.storage
   implicit def toHttp(implicit config: AppConfig): HttpConfig       = config.http
   implicit def toIam(implicit config: AppConfig): IamClientConfig   = config.iam
+  implicit def toDigest(implicit config: AppConfig): DigestConfig   = config.digest
 
   val orderedKeys = OrderedKeys(
     List(

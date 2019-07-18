@@ -1,30 +1,28 @@
 package ch.epfl.bluebrain.nexus.storage
 
+import java.nio.file.StandardCopyOption._
 import java.nio.file.{Files, Path, Paths}
-import java.security.MessageDigest
 
 import akka.http.scaladsl.model.Uri
 import akka.stream.Materializer
 import akka.stream.alpakka.file.scaladsl.Directory
-import akka.stream.scaladsl.Compression.gzip
 import akka.stream.scaladsl.{FileIO, Keep, Sink}
-import akka.util.ByteString
 import cats.effect.Effect
 import cats.implicits._
 import ch.epfl.bluebrain.nexus.storage.File._
 import ch.epfl.bluebrain.nexus.storage.Rejection.{PathAlreadyExists, PathContainsLinks, PathNotFound}
 import ch.epfl.bluebrain.nexus.storage.StorageError.{InternalError, PathInvalid}
-import ch.epfl.bluebrain.nexus.storage.Storages.PathExistence._
 import ch.epfl.bluebrain.nexus.storage.Storages.BucketExistence._
+import ch.epfl.bluebrain.nexus.storage.Storages.PathExistence._
 import ch.epfl.bluebrain.nexus.storage.Storages.{BucketExistence, PathExistence}
-import ch.epfl.bluebrain.nexus.storage.config.AppConfig.StorageConfig
+import ch.epfl.bluebrain.nexus.storage.config.AppConfig.{DigestConfig, StorageConfig}
+import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
 import com.github.ghik.silencer.silent
-import java.nio.file.StandardCopyOption._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Success, Try}
 
-trait Storages[Source] {
+trait Storages[F[_], Source] {
 
   /**
     * Checks that the provided bucket name exists and it is readable/writable.
@@ -50,7 +48,7 @@ trait Storages[Source] {
     * @return Left(rejection) or Right(fileAttributes).
     *         The file attributes contains the metadata plus the file bytes, digest and location
     */
-  def createFile[F[_]: Effect](name: String, relativePath: Uri.Path, source: Source)(
+  def createFile(name: String, relativePath: Uri.Path, source: Source)(
       implicit @silent bucketEv: BucketExists,
       @silent pathEv: PathDoesNotExist): F[FileAttributes]
 
@@ -63,7 +61,7 @@ trait Storages[Source] {
     * @return Left(rejection) or Right(fileAttributes).
     *         The file attributes contains the metadata plus the file bytes, digest and location
     */
-  def moveFile[F[_]: Effect](name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
+  def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
       implicit @silent bucketEv: BucketExists): F[RejOrAttributes]
 
   /**
@@ -75,6 +73,15 @@ trait Storages[Source] {
     */
   def getFile(name: String, relativePath: Uri.Path)(implicit @silent bucketEv: BucketExists,
                                                     @silent pathEv: PathExists): RejOr[(Source, Option[String])]
+
+  /**
+    * Retrieves the digest of the file.
+    *
+    * @param name         the storage bucket name
+    * @param relativePath the relative path to the file location
+    */
+  def getDigest(name: String, relativePath: Uri.Path)(implicit @silent bucketEv: BucketExists,
+                                                      @silent pathEv: PathExists): F[Digest]
 
 }
 
@@ -100,8 +107,11 @@ object Storages {
   /**
     * An Disk implementation of Storage interface.
     */
-  final class DiskStorage(config: StorageConfig)(implicit ec: ExecutionContext, mt: Materializer)
-      extends Storages[AkkaSource] {
+  final class DiskStorage[F[_]](config: StorageConfig, digestConfig: DigestConfig, cache: DigestCache[F])(
+      implicit ec: ExecutionContext,
+      mt: Materializer,
+      F: Effect[F])
+      extends Storages[F, AkkaSource] {
 
     private def basePath(name: String, protectedDir: Boolean = true): Path = {
       val path = config.rootVolume.resolve(name).normalize()
@@ -124,54 +134,44 @@ object Storages {
       else PathDoesNotExist
     }
 
-    def createFile[F[_]](name: String, relativeFilePath: Uri.Path, source: AkkaSource)(
-        implicit F: Effect[F],
-        @silent bucketEv: BucketExists,
+    def createFile(name: String, relativeFilePath: Uri.Path, source: AkkaSource)(
+        implicit @silent bucketEv: BucketExists,
         @silent pathEv: PathDoesNotExist): F[FileAttributes] = {
       val absFilePath = filePath(name, relativeFilePath)
       if (absFilePath.descendantOf(basePath(name)))
         F.fromTry(Try(Files.createDirectories(absFilePath.getParent))) >>
           source
-            .alsoToMat(digestSink(config.algorithm))(Keep.right)
-            .toMat(FileIO.toPath(absFilePath)) {
-              case (digFuture, ioFuture) =>
-                digFuture.zipWith(ioFuture) {
-                  case (digest, io) if io.wasSuccessful && absFilePath.toFile.exists() =>
-                    Future(FileAttributes(s"file://$absFilePath", io.count, digest))
-                  case _ =>
-                    Future.failed(InternalError(s"I/O error writing file to path '$relativeFilePath'"))
-                }
+            .toMat(FileIO.toPath(absFilePath))(Keep.right)
+            .mapMaterializedValue {
+              _.flatMap {
+                case io if io.wasSuccessful && absFilePath.toFile.exists() =>
+                  Future(FileAttributes(s"file://$absFilePath", io.count))
+                case _ =>
+                  Future.failed(InternalError(s"I/O error writing file to path '$relativeFilePath'"))
+              }
             }
             .run()
-            .flatten
             .to[F]
       else
         F.raiseError(PathInvalid(name, relativeFilePath))
     }
 
-    def moveFile[F[_]](name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
-        implicit F: Effect[F],
-        bucketEv: BucketExists): F[RejOrAttributes] = {
+    def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
+        implicit bucketEv: BucketExists): F[RejOrAttributes] = {
 
       val bucketPath          = basePath(name, protectedDir = false)
       val bucketProtectedPath = basePath(name)
       val absSourcePath       = filePath(name, sourceRelativePath, protectedDir = false)
       val absDestPath         = filePath(name, destRelativePath)
 
-      def computeMetadata(source: AkkaSource): F[RejOrAttributes] =
-        source
-          .toMat(digestSink(config.algorithm))(Keep.right)
-          .run()
-          .map[RejOrAttributes] { digest =>
-            Right(FileAttributes(s"file://$absDestPath", Files.size(absDestPath), digest))
-          }
-          .to[F]
-
-      //TODO: When the resource that we want to move is being used by some process, a copy will be issue instead: https://stackoverflow.com/questions/34733765/java-nio-file-files-move-is-copying-instead-of-moving
-      def moveAndComputeMeta(sourceF: Path => AkkaSource): F[RejOrAttributes] =
-        F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
-          F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
-          computeMetadata(sourceF(absDestPath))
+      //TODO: This method should first call the binary to change the ownership + permissions before doing the move
+      def computeSizeAndMove(): F[RejOrAttributes] =
+        size(absSourcePath).flatMap { computedSize =>
+          F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
+            F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
+            F.pure(cache.asyncComputePut(absDestPath, digestConfig.algorithm)) >>
+            F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize)))
+        }
 
       def dirContainsLink(path: Path): F[Boolean] =
         Directory
@@ -192,11 +192,11 @@ object Storages {
       else if (Files.isSymbolicLink(absSourcePath) || containsHardLink(absSourcePath))
         F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
       else if (Files.isRegularFile(absSourcePath))
-        moveAndComputeMeta(getFile)
+        computeSizeAndMove()
       else if (Files.isDirectory(absSourcePath))
         dirContainsLink(absSourcePath).flatMap {
           case true  => F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
-          case false => moveAndComputeMeta(getDirectory)
+          case false => computeSizeAndMove()
         } else F.pure(Left(PathNotFound(name, sourceRelativePath)))
     }
 
@@ -204,13 +204,14 @@ object Storages {
         implicit @silent bucketEv: BucketExists,
         @silent pathEv: PathExists): RejOr[(AkkaSource, Option[String])] = {
       val absPath = filePath(name, relativePath)
-      if (Files.isRegularFile(absPath)) Right(getFile(absPath) -> Some(absPath.getFileName.toString))
-      else if (Files.isDirectory(absPath)) Right(getDirectory(absPath) -> None)
+      if (Files.isRegularFile(absPath)) Right(fileSource(absPath) -> Some(absPath.getFileName.toString))
+      else if (Files.isDirectory(absPath)) Right(folderSource(absPath) -> None)
       else Left(PathNotFound(name, relativePath))
     }
 
-    private def getDirectory(absPath: Path): AkkaSource = Directory.walk(absPath).via(TarFlow.writer(absPath)).via(gzip)
-    private def getFile(absPath: Path): AkkaSource      = FileIO.fromPath(absPath)
+    def getDigest(name: String, relativePath: Uri.Path)(implicit bucketEv: BucketExists,
+                                                        pathEv: PathExists): F[Digest] =
+      cache.get(filePath(name, relativePath))
 
     private def containsHardLink(absPath: Path): Boolean =
       if (Files.isDirectory(absPath)) false
@@ -220,12 +221,13 @@ object Storages {
           case _              => false
         }
 
-    private def digestSink(algorithm: String): Sink[ByteString, Future[Digest]] =
-      Sink
-        .fold(MessageDigest.getInstance(algorithm))((digest, currentBytes: ByteString) => {
-          digest.update(currentBytes.asByteBuffer)
-          digest
-        })
-        .mapMaterializedValue(_.map(dig => Digest(dig.getAlgorithm, dig.digest().map("%02x".format(_)).mkString)))
+    private def size(absPath: Path): F[Long] =
+      if (Files.isDirectory(absPath))
+        Directory.walk(absPath).filter(Files.isRegularFile(_)).runFold[Long](0L)(_ + Files.size(_)).to[F]
+      else if (Files.isRegularFile(absPath))
+        F.pure(Files.size(absPath))
+      else
+        F.raiseError(InternalError(s"Path '$absPath' is not a file nor a directory"))
   }
+
 }

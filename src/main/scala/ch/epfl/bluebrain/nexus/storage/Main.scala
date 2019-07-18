@@ -7,9 +7,11 @@ import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
 import akka.stream.{ActorMaterializer, Materializer}
+import akka.util.Timeout
 import cats.effect.Effect
 import ch.epfl.bluebrain.nexus.iam.client.IamClient
 import ch.epfl.bluebrain.nexus.storage.Storages.DiskStorage
+import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
 import ch.epfl.bluebrain.nexus.storage.config.{AppConfig, Settings}
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig._
 import ch.epfl.bluebrain.nexus.storage.routes.Routes
@@ -53,8 +55,10 @@ object Main {
     implicit val mt: Materializer           = ActorMaterializer()
     implicit val eff: Effect[Task]          = Task.catsEffect(Scheduler.global)
     implicit val iamClient: IamClient[Task] = IamClient[Task]
+    implicit val timeout                    = Timeout(1 minute)
 
-    val storages: Storages[AkkaSource] = new DiskStorage(appConfig.storage)
+    val storages: Storages[Task, AkkaSource] =
+      new DiskStorage(appConfig.storage, appConfig.digest, DigestCache[Task, AkkaSource])
 
     val logger: LoggingAdapter = Logging(as, getClass)
 

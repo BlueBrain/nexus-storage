@@ -31,7 +31,7 @@ object File {
     * @param bytes     the size of the file file in bytes
     * @param digest    the digest information of the file
     */
-  final case class FileAttributes(location: Uri, bytes: Long, digest: Digest)
+  final case class FileAttributes(location: Uri, bytes: Long)
   object FileAttributes {
     implicit val fileAttrEncoder: Encoder[FileAttributes] =
       deriveEncoder[FileAttributes].mapJson(_.addContext(resourceCtxUri))
@@ -47,6 +47,7 @@ object File {
   final case class Digest(algorithm: String, value: String)
 
   object Digest {
+    val empty: Digest                           = Digest("", "")
     implicit val digestEncoder: Encoder[Digest] = deriveEncoder[Digest]
     implicit val digestDecoder: Decoder[Digest] = deriveDecoder[Digest]
   }
