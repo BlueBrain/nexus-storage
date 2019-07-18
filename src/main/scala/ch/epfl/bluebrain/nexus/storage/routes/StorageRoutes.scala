@@ -1,12 +1,12 @@
 package ch.epfl.bluebrain.nexus.storage.routes
 
-//import akka.http.scaladsl.coding.Gzip
 import akka.http.scaladsl.model.MediaTypes._
 import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.model.headers.RawHeader
-import akka.http.scaladsl.model.{ContentType, HttpEntity, Uri}
+import akka.http.scaladsl.model.{ContentType, HttpEntity, StatusCode, Uri}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import ch.epfl.bluebrain.nexus.storage.File.Digest
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.HttpConfig
 import ch.epfl.bluebrain.nexus.storage.routes.StorageDirectives._
@@ -80,7 +80,11 @@ class StorageRoutes()(implicit storages: Storages[Task, AkkaSource], hc: HttpCon
               // Get file digest
               get {
                 pathExists(name, relativePath).apply { implicit pathExistsEvidence =>
-                  complete(OK -> storages.getDigest(name, relativePath).runToFuture)
+                  val result = storages.getDigest(name, relativePath).map[(StatusCode, Digest)] {
+                    case Digest.empty => Accepted -> Digest.empty
+                    case digest       => OK       -> digest
+                  }
+                  complete(result.runToFuture)
                 }
               }
             }
@@ -91,6 +95,7 @@ class StorageRoutes()(implicit storages: Storages[Task, AkkaSource], hc: HttpCon
 
   private def sourceEntity(source: AkkaSource, contentType: ContentType, filename: String): Route =
     (respondWithHeaders(RawHeader("Content-Disposition", s"attachment; filename*=UTF-8''$filename"))) {
+
       complete(HttpEntity(contentType, source))
     }
 }

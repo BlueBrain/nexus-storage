@@ -355,7 +355,7 @@ class StorageRoutesSpec
         }
       }
 
-      "pass" in new RandomFile {
+      "return digest" in new RandomFile {
         val filePathUri = Uri.Path(s"$filename")
         storages.exists(name) shouldReturn BucketExists
         val digest = Digest("SHA-256", genString())
@@ -366,6 +366,19 @@ class StorageRoutesSpec
           status shouldEqual OK
           responseAs[Json] shouldEqual Json.obj("_algorithm" -> Json.fromString(digest.algorithm),
                                                 "_value"     -> Json.fromString(digest.value))
+          storages.getDigest(name, filePathUri) wasCalled once
+        }
+      }
+
+      "return empty digest" in new RandomFile {
+        val filePathUri = Uri.Path(s"$filename")
+        storages.exists(name) shouldReturn BucketExists
+        storages.getDigest(name, filePathUri) shouldReturn Task(Digest.empty)
+        storages.pathExists(name, filePathUri) shouldReturn PathExists
+
+        Get(s"/v1/buckets/$name/digests/$filename") ~> Accept(`*/*`) ~> route ~> check {
+          status shouldEqual Accepted
+          responseAs[Json] shouldEqual Json.obj("_algorithm" -> Json.fromString(""), "_value" -> Json.fromString(""))
           storages.getDigest(name, filePathUri) wasCalled once
         }
       }
