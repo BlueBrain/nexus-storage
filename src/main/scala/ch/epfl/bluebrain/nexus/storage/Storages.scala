@@ -44,9 +44,8 @@ trait Storages[F[_], Source] {
     *
     * @param name         the storage bucket name
     * @param relativePath the relative path location
-    * @param source   the file content
-    * @return Left(rejection) or Right(fileAttributes).
-    *         The file attributes contains the metadata plus the file bytes, digest and location
+    * @param source       the file content
+    * @return The file attributes containing the metadata (bytes and location) wrapped in an F effect type
     */
   def createFile(name: String, relativePath: Uri.Path, source: Source)(
       implicit @silent bucketEv: BucketExists,
@@ -59,7 +58,7 @@ trait Storages[F[_], Source] {
     * @param sourceRelativePath the source relative path location
     * @param destRelativePath   the destination relative path location inside the nexus folder
     * @return Left(rejection) or Right(fileAttributes).
-    *         The file attributes contains the metadata plus the file bytes, digest and location
+    *         The file attributes contain the metadata (bytes and location) wrapped in an F effect type
     */
   def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
       implicit @silent bucketEv: BucketExists): F[RejOrAttributes]
@@ -223,7 +222,7 @@ object Storages {
 
     private def size(absPath: Path): F[Long] =
       if (Files.isDirectory(absPath))
-        Directory.walk(absPath).filter(Files.isRegularFile(_)).runFold[Long](0L)(_ + Files.size(_)).to[F]
+        Directory.walk(absPath).filter(Files.isRegularFile(_)).runFold(0L)(_ + Files.size(_)).to[F]
       else if (Files.isRegularFile(absPath))
         F.pure(Files.size(absPath))
       else

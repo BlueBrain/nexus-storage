@@ -18,7 +18,8 @@ import scala.util.control.NonFatal
 trait DigestCache[F[_]] {
 
   /**
-    * Fetches the already computed digest for the provided absFilePath if exists
+    * Fetches the digest for the provided absFilePath.
+    * If the digest is being computed or is going to be computed, a Digest.empty is returned
     *
     * @param filePath the absolute file path
     * @return the digest wrapped in the effect type F
