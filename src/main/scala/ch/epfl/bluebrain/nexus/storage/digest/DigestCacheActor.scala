@@ -30,9 +30,9 @@ class DigestCacheActor[F[_]: Effect, S](computation: DigestComputation[F, S])(im
     with ActorLogging {
 
   import context.dispatcher
-  private val map: mutable.Map[String, Either[Long, Digest]] = mutable.LinkedHashMap.empty[String, Either[Long, Digest]]
-  private val selfRef                                        = self
-  private implicit val mt                                    = ActorMaterializer()
+  private val map         = mutable.LinkedHashMap.empty[String, Either[Long, Digest]]
+  private val selfRef     = self
+  private implicit val mt = ActorMaterializer()
 
   private val digestComputation: Flow[Compute, Option[Put], NotUsed] =
     Flow[Compute].mapAsyncUnordered(config.concurrentComputations) {
