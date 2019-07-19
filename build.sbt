@@ -32,8 +32,8 @@ val alpakkaVersion        = "1.0.2"
 val catsVersion           = "1.6.1"
 val catsEffectVersion     = "1.3.1"
 val circeVersion          = "0.11.1"
-val commonsVersion        = "0.16.0"
-val iamVersion            = "1.1.0"
+val commonsVersion        = "0.17.0"
+val iamVersion            = "1.1.1"
 val mockitoVersion        = "1.5.11"
 val monixVersion          = "3.0.0-RC3"
 val pureconfigVersion     = "0.11.1"
@@ -86,7 +86,15 @@ lazy val storage = project
       mockito         % Test,
       scalaTest       % Test
     ),
-    resolvers += "bogdanromanx" at "http://dl.bintray.com/bogdanromanx/maven"
+    mappings in Universal := {
+      val universalMappings = (mappings in Universal).value
+      universalMappings.foldLeft(Vector.empty[(File, String)]) {
+        case (acc, (file, filename)) if filename.contains("kanela-agent") =>
+          acc :+ (file, "lib/instrumentation-agent.jar")
+        case (acc, other) =>
+          acc :+ other
+      }
+    }
   )
 
 lazy val client = project
