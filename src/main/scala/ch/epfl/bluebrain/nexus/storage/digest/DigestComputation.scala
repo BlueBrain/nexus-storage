@@ -11,7 +11,7 @@ import ch.epfl.bluebrain.nexus.storage.File.Digest
 import ch.epfl.bluebrain.nexus.storage.StorageError.InternalError
 import ch.epfl.bluebrain.nexus.storage.{fileSource, folderSource, AkkaSource}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 trait DigestComputation[F[_], Source] {
@@ -28,6 +28,14 @@ trait DigestComputation[F[_], Source] {
 
 object DigestComputation {
 
+  def sink(msgDigest: MessageDigest)(implicit ec: ExecutionContext): Sink[ByteString, Future[Digest]] =
+    Sink
+      .fold(msgDigest)((digest, currentBytes: ByteString) => {
+        digest.update(currentBytes.asByteBuffer)
+        digest
+      })
+      .mapMaterializedValue(_.map(dig => Digest(dig.getAlgorithm, dig.digest().map("%02x".format(_)).mkString)))
+
   /**
     * A digest for a source of type AkkaSource
     *
@@ -42,14 +50,8 @@ object DigestComputation {
       else
         Try(MessageDigest.getInstance(algorithm)) match {
           case Success(msgDigest) =>
-            val sink = Sink
-              .fold(msgDigest)((digest, currentBytes: ByteString) => {
-                digest.update(currentBytes.asByteBuffer)
-                digest
-              })
-              .mapMaterializedValue(_.map(dig => Digest(dig.getAlgorithm, dig.digest().map("%02x".format(_)).mkString)))
             val source = if (Files.isDirectory(path)) folderSource(path) else fileSource(path)
-            source.runWith(sink).to[F]
+            source.runWith(sink(msgDigest)).to[F]
           case Failure(_) => F.raiseError(InternalError(s"Invalid algorithm '$algorithm'."))
         }
 
