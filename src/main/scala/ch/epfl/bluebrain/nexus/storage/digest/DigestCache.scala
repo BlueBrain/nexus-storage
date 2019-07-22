@@ -1,6 +1,7 @@
 package ch.epfl.bluebrain.nexus.storage.digest
 
 import java.nio.file.Path
+import java.time.Clock
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.{ask, AskTimeoutException}
@@ -39,6 +40,7 @@ object DigestCache {
   private[this] val logger = Logger[this.type]
 
   def apply[F[_], Source](implicit system: ActorSystem,
+                          clock: Clock,
                           tm: Timeout,
                           F: Effect[F],
                           computation: DigestComputation[F, Source],

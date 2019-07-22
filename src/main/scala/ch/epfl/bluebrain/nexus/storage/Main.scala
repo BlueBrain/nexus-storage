@@ -1,6 +1,7 @@
 package ch.epfl.bluebrain.nexus.storage
 
 import java.nio.file.Paths
+import java.time.Clock
 
 import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
@@ -62,6 +63,7 @@ object Main {
     implicit val eff: Effect[Task]          = Task.catsEffect(Scheduler.global)
     implicit val iamClient: IamClient[Task] = IamClient[Task]
     implicit val timeout                    = Timeout(1 minute)
+    implicit val clock                      = Clock.systemUTC
 
     val storages: Storages[Task, AkkaSource] =
       new DiskStorage(appConfig.storage, appConfig.digest, DigestCache[Task, AkkaSource])

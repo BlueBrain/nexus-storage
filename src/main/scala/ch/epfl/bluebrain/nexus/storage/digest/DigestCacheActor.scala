@@ -1,6 +1,7 @@
 package ch.epfl.bluebrain.nexus.storage.digest
 
 import java.nio.file.Path
+import java.time.Clock
 
 import akka.NotUsed
 import akka.actor.{Actor, ActorLogging, Props}
@@ -25,7 +26,8 @@ import scala.concurrent.duration._
   * @tparam F the effect type
   * @tparam S the source of the storage computation
   */
-class DigestCacheActor[F[_]: Effect, S](computation: DigestComputation[F, S])(implicit config: DigestConfig)
+class DigestCacheActor[F[_]: Effect, S](computation: DigestComputation[F, S])(implicit config: DigestConfig,
+                                                                              clock: Clock)
     extends Actor
     with ActorLogging {
 
@@ -66,9 +68,7 @@ class DigestCacheActor[F[_]: Effect, S](computation: DigestComputation[F, S])(im
           sender() ! digest
 
         case Some(Left(time)) if !needsReTrigger(time) =>
-          log.debug("Digest for file '{}' is being computed. Computation started {} ms ago.",
-                    filePath,
-                    System.currentTimeMillis() - time)
+          log.debug("Digest for file '{}' is being computed. Computation started {} ms ago.", filePath, now() - time)
           sender() ! Digest.empty
 
         case Some(Left(_)) =>
@@ -107,10 +107,10 @@ class DigestCacheActor[F[_]: Effect, S](computation: DigestComputation[F, S])(im
   private def removeOldest(n: Int) =
     map --= map.take(n).keySet
 
-  private def now(): Long = System.currentTimeMillis()
+  private def now(): Long = clock.instant().toEpochMilli
 
   private def needsReTrigger(time: Long): Boolean = {
-    val elapsed: FiniteDuration = (System.currentTimeMillis() - time) millis
+    val elapsed: FiniteDuration = (now() - time) millis
 
     elapsed > config.retriggerAfter
   }
@@ -128,7 +128,7 @@ class DigestCacheActor[F[_]: Effect, S](computation: DigestComputation[F, S])(im
 
 object DigestCacheActor {
 
-  def props[F[_]: Effect, S](computation: DigestComputation[F, S])(implicit config: DigestConfig): Props =
+  def props[F[_]: Effect, S](computation: DigestComputation[F, S])(implicit config: DigestConfig, clock: Clock): Props =
     Props(new DigestCacheActor(computation))
 
   private[digest] sealed trait Protocol extends Product with Serializable

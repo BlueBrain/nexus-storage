@@ -1,6 +1,7 @@
 package ch.epfl.bluebrain.nexus.storage.digest
 
 import java.nio.file.{Path, Paths}
+import java.time.{Clock, Instant, ZoneId}
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor.ActorSystem
@@ -40,24 +41,34 @@ class DigestCacheSpec
   }
 
   trait Ctx {
+    val path: Path = Paths.get(genString())
+    val digest     = Digest(config.algorithm, genString())
+    val counter    = new AtomicInteger(0)
+
+    implicit val clock: Clock = new Clock {
+      override def getZone: ZoneId                 = ZoneId.systemDefault()
+      override def withZone(zoneId: ZoneId): Clock = Clock.systemUTC()
+      // For every digest computation done, it passes one second
+      override def instant(): Instant = Instant.ofEpochSecond(counter.get + 1L)
+    }
     val digestCache = DigestCache[Task, String]
-    val path: Path  = Paths.get(genString())
-    val digest      = Digest(config.algorithm, genString())
+    computation(path, config.algorithm) shouldReturn
+      Task { counter.incrementAndGet(); digest }
   }
 
   "A DigestCache" should {
 
     "trigger a computation and fetch file after" in new Ctx {
-      computation(path, config.algorithm) shouldReturn Task(digest)
       digestCache.asyncComputePut(path, config.algorithm)
-      eventually(computation(path, config.algorithm) wasCalled once)
+      eventually(counter.get shouldEqual 1)
+      computation(path, config.algorithm) wasCalled once
       digestCache.get(path).runToFuture.futureValue shouldEqual digest
       computation(path, config.algorithm) wasCalled once
     }
 
     "get file that triggers digest computation" in new Ctx {
-      computation(path, config.algorithm) shouldReturn Task(digest)
       digestCache.get(path).runToFuture.futureValue shouldEqual Digest.empty
+      eventually(counter.get shouldEqual 1)
       computation(path, config.algorithm) wasCalled once
       digestCache.get(path).runToFuture.futureValue shouldEqual digest
       computation(path, config.algorithm) wasCalled once
@@ -69,7 +80,6 @@ class DigestCacheSpec
       }
       val time = System.currentTimeMillis()
 
-      val counter = new AtomicInteger(0)
       forAll(list) {
         case (path, digest) =>
           computation(path, config.algorithm) shouldReturn
@@ -81,11 +91,13 @@ class DigestCacheSpec
           digestCache.get(path).runToFuture.futureValue shouldEqual Digest.empty
       }
 
+      eventually(counter.get() shouldEqual 10)
+
       forAll(list) {
         case (path, _) =>
           eventually(computation(path, config.algorithm) wasCalled once)
       }
-      eventually(counter.get() shouldEqual 10)
+
       val diff = System.currentTimeMillis() - time
       diff should be > 4000L
       diff should be < 5000L
@@ -100,14 +112,11 @@ class DigestCacheSpec
       val list = List.tabulate(20) { i =>
         Paths.get(i.toString) -> Digest(config.algorithm, i.toString)
       }
-      val counter = new AtomicInteger(0)
 
       forAll(list) {
         case (path, digest) =>
-          computation(path, config.algorithm) shouldReturn Task {
-            counter.incrementAndGet()
-            digest
-          }
+          computation(path, config.algorithm) shouldReturn
+            Task { counter.incrementAndGet(); digest }
           digestCache.get(path).runToFuture.futureValue shouldEqual Digest.empty
       }
 
@@ -124,7 +133,7 @@ class DigestCacheSpec
       }
     }
 
-    "verify failure" in new Ctx {
+    "verify failure is skipped" in new Ctx {
       val list = List.tabulate(5) { i =>
         Paths.get(i.toString) -> Digest(config.algorithm, i.toString)
       }
