@@ -159,7 +159,8 @@ class StorageRoutesSpec
 
       "pass" in new RandomFileCreate {
         val absoluteFilePath = appConfig.storage.rootVolume.resolve(filePath)
-        val attributes       = FileAttributes(s"file://$absoluteFilePath", 12L)
+        val digest           = Digest("SHA-256", genString())
+        val attributes       = FileAttributes(s"file://$absoluteFilePath", 12L, digest)
         storages.exists(name) shouldReturn BucketExists
         storages.pathExists(name, filePathUri) shouldReturn PathDoesNotExist
         storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(eqTo(BucketExists), eqTo(PathDoesNotExist)) shouldReturn Task(
@@ -170,8 +171,10 @@ class StorageRoutesSpec
           responseAs[Json] shouldEqual jsonContentOf(
             "/file-created.json",
             Map(
-              quote("{location}") -> attributes.location.toString,
-              quote("{bytes}")    -> attributes.bytes.toString,
+              quote("{location}")  -> attributes.location.toString,
+              quote("{bytes}")     -> attributes.bytes.toString,
+              quote("{algorithm}") -> attributes.digest.algorithm,
+              quote("{value}")     -> attributes.digest.value
             )
           )
           storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(eqTo(BucketExists),
@@ -242,7 +245,7 @@ class StorageRoutesSpec
         storages.exists(name) shouldReturn BucketExists
         val source     = "source/dir"
         val dest       = "dest/dir"
-        val attributes = FileAttributes(s"file://some/prefix/$dest", 12L)
+        val attributes = FileAttributes(s"file://some/prefix/$dest", 12L, Digest.empty)
         storages.moveFile(name, Uri.Path(source), Uri.Path(dest))(BucketExists) shouldReturn Task.pure(
           Right(attributes))
 
@@ -253,8 +256,10 @@ class StorageRoutesSpec
           responseAs[Json] shouldEqual jsonContentOf(
             "/file-created.json",
             Map(
-              quote("{location}") -> attributes.location.toString,
-              quote("{bytes}")    -> attributes.bytes.toString
+              quote("{location}")  -> attributes.location.toString,
+              quote("{bytes}")     -> attributes.bytes.toString,
+              quote("{algorithm}") -> "",
+              quote("{value}")     -> ""
             )
           )
 

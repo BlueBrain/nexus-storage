@@ -2,6 +2,7 @@ package ch.epfl.bluebrain.nexus.storage
 
 import java.nio.file.StandardCopyOption._
 import java.nio.file.{Files, Path, Paths}
+import java.security.MessageDigest
 
 import akka.http.scaladsl.model.Uri
 import akka.stream.Materializer
@@ -18,6 +19,7 @@ import ch.epfl.bluebrain.nexus.storage.Storages.{BucketExistence, PathExistence}
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.{DigestConfig, StorageConfig}
 import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
 import com.github.ghik.silencer.silent
+import ch.epfl.bluebrain.nexus.storage.digest.DigestComputation.sink
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Success, Try}
@@ -139,19 +141,22 @@ object Storages {
       val absFilePath = filePath(name, relativeFilePath)
       if (absFilePath.descendantOf(basePath(name)))
         F.fromTry(Try(Files.createDirectories(absFilePath.getParent))) >>
-          source
-            .toMat(FileIO.toPath(absFilePath))(Keep.right)
-            .mapMaterializedValue {
-              _.flatMap {
-                case io if io.wasSuccessful && absFilePath.toFile.exists() =>
-                  Future(FileAttributes(s"file://$absFilePath", io.count))
-                case _ =>
-                  Future.failed(InternalError(s"I/O error writing file to path '$relativeFilePath'"))
+          F.fromTry(Try(MessageDigest.getInstance(digestConfig.algorithm))).flatMap { msgDigest =>
+            source
+              .alsoToMat(sink(msgDigest))(Keep.right)
+              .toMat(FileIO.toPath(absFilePath)) {
+                case (digFuture, ioFuture) =>
+                  digFuture.zipWith(ioFuture) {
+                    case (digest, io) if io.wasSuccessful && absFilePath.toFile.exists() =>
+                      Future(FileAttributes(s"file://$absFilePath", io.count, digest))
+                    case _ =>
+                      Future.failed(InternalError(s"I/O error writing file to path '$relativeFilePath'"))
+                  }
               }
-            }
-            .run()
-            .to[F]
-      else
+              .run()
+              .flatten
+              .to[F]
+          } else
         F.raiseError(PathInvalid(name, relativeFilePath))
     }
 
@@ -169,7 +174,7 @@ object Storages {
           F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
             F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
             F.pure(cache.asyncComputePut(absDestPath, digestConfig.algorithm)) >>
-            F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize)))
+            F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize, Digest.empty)))
         }
 
       def dirContainsLink(path: Path): F[Boolean] =
