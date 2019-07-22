@@ -81,7 +81,7 @@ object Routes {
     *
     * @param storages the storages operations
     */
-  def apply(storages: Storages[AkkaSource])(implicit config: AppConfig, iamClient: IamClient[Task]): Route =
+  def apply(storages: Storages[Task, AkkaSource])(implicit config: AppConfig, iamClient: IamClient[Task]): Route =
     //TODO: Fetch Bearer token and verify identity
     wrap {
       concat(

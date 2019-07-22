@@ -4,7 +4,8 @@ import java.nio.file.{Path => JavaPath}
 
 import akka.http.scaladsl.model.Uri
 import akka.http.scaladsl.model.Uri.Path
-import akka.stream.scaladsl.Source
+import akka.stream.alpakka.file.scaladsl.Directory
+import akka.stream.scaladsl.{FileIO, Source}
 import akka.util.ByteString
 import cats.effect.{IO, LiftIO}
 import ch.epfl.bluebrain.nexus.storage.File.FileAttributes
@@ -74,5 +75,9 @@ package object storage {
     val typed = json.hcursor.get[String]("@type").map(v => Json.obj("@type" -> v.asJson)).getOrElse(Json.obj())
     typed deepMerge Json.obj("@context" -> Json.fromString(errorCtxUri.toString()))
   }
+
+  def folderSource(path: JavaPath): AkkaSource = Directory.walk(path).via(TarFlow.writer(path))
+
+  def fileSource(path: JavaPath): AkkaSource = FileIO.fromPath(path)
 
 }
