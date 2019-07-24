@@ -26,7 +26,7 @@ scalafmt: {
 
 // Dependency versions
 val akkaVersion           = "2.5.23"
-val akkaHttpVersion       = "10.1.8"
+val akkaHttpVersion       = "10.1.9"
 val apacheCompressVersion = "1.18"
 val alpakkaVersion        = "1.0.2"
 val catsVersion           = "1.6.1"
