@@ -316,7 +316,6 @@ class StorageRoutesSpec
         Get(s"/v1/buckets/$name/files/$filename") ~> Accept(`*/*`) ~> route ~> check {
           status shouldEqual OK
           contentType.value shouldEqual "application/octet-stream"
-          header("Content-Disposition").value.value() shouldEqual s"""attachment; filename*=UTF-8''$filename"""
           responseEntity.dataBytes.runFold("")(_ ++ _.utf8String).futureValue shouldEqual content
           storages.getFile(name, filePathUri) wasCalled once
         }
@@ -331,9 +330,7 @@ class StorageRoutesSpec
 
         Get(s"/v1/buckets/$name/files/$directory") ~> Accept(`*/*`) ~> route ~> check {
           status shouldEqual OK
-          contentType.value shouldEqual "application/gnutar"
-          header("Content-Disposition").value.value() shouldEqual
-            s"""attachment; filename*=UTF-8''dir-$name.tgz"""
+          contentType.value shouldEqual "application/x-tar"
           responseEntity.dataBytes.runFold("")(_ ++ _.utf8String).futureValue shouldEqual content
           storages.getFile(name, directoryUri) wasCalled once
         }
