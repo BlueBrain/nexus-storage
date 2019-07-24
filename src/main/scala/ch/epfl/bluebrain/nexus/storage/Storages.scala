@@ -12,16 +12,17 @@ import cats.effect.Effect
 import cats.implicits._
 import ch.epfl.bluebrain.nexus.storage.File._
 import ch.epfl.bluebrain.nexus.storage.Rejection.{PathAlreadyExists, PathContainsLinks, PathNotFound}
-import ch.epfl.bluebrain.nexus.storage.StorageError.{InternalError, PathInvalid}
+import ch.epfl.bluebrain.nexus.storage.StorageError.{InternalError, PathInvalid, PermissionsFixingFailed}
 import ch.epfl.bluebrain.nexus.storage.Storages.BucketExistence._
 import ch.epfl.bluebrain.nexus.storage.Storages.PathExistence._
 import ch.epfl.bluebrain.nexus.storage.Storages.{BucketExistence, PathExistence}
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.{DigestConfig, StorageConfig}
 import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
-import com.github.ghik.silencer.silent
 import ch.epfl.bluebrain.nexus.storage.digest.DigestComputation.sink
+import com.github.ghik.silencer.silent
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.sys.process._
 import scala.util.{Success, Try}
 
 trait Storages[F[_], Source] {
@@ -168,10 +169,23 @@ object Storages {
       val absSourcePath       = filePath(name, sourceRelativePath, protectedDir = false)
       val absDestPath         = filePath(name, destRelativePath)
 
-      //TODO: This method should first call the binary to change the ownership + permissions before doing the move
+      def fixPermissions(path: Path): F[Unit] =
+        if (config.fixPermissions) {
+          val absPath  = path.toAbsolutePath.normalize
+          val cmd      = config.fixerBinary.toString
+          val process  = Process(cmd, List(absPath.toString))
+          val logger   = new StringProcessLogger(cmd)
+          val exitCode = process ! logger
+          if (exitCode == 0) F.unit
+          else F.raiseError(PermissionsFixingFailed(absPath, logger.toString))
+        } else {
+          F.unit
+        }
+
       def computeSizeAndMove(): F[RejOrAttributes] =
         size(absSourcePath).flatMap { computedSize =>
           F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
+            fixPermissions(absSourcePath) >>
             F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
             F.pure(cache.asyncComputePut(absDestPath, digestConfig.algorithm)) >>
             F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize, Digest.empty)))

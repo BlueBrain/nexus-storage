@@ -36,7 +36,7 @@ pub fn visit_all(path: &Path) -> Result<(), Failure> {
 }
 
 pub fn set_owner(path: &Path) -> Result<(), Failure> {
-    let p = CString::new(path.as_os_str().as_bytes()).map_err(|_| PathCannotHaveNul)?;
+    let p = CString::new(path.as_os_str().as_bytes()).map_err(|_| PathCannotHaveNull)?;
     let uid = get_uid()?;
     let gid = get_gid()?;
     let chown = unsafe { chown(p.as_ptr() as *const i8, uid, gid) };
@@ -48,7 +48,7 @@ pub fn set_owner(path: &Path) -> Result<(), Failure> {
 }
 
 pub fn set_permissions(path: &Path, mask: u32) -> Result<(), Failure> {
-    let p = CString::new(path.as_os_str().as_bytes()).map_err(|_| PathCannotHaveNul)?;
+    let p = CString::new(path.as_os_str().as_bytes()).map_err(|_| PathCannotHaveNull)?;
     let chmod = unsafe { chmod(p.as_ptr() as *const i8, mask) };
     if chmod == 0 {
         Ok(())
