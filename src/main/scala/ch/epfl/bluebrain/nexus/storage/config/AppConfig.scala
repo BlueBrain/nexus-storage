@@ -63,8 +63,13 @@ object AppConfig {
     *
     * @param rootVolume         the base [[Path]] where the files are stored
     * @param protectedDirectory the relative [[Path]] of the protected directory once the storage bucket is selected
+    * @param fixerEnabled       call the permissions fixer when linking files, before they are moved
+    * @param fixerCommand       the command and arguments to call the 'nexus-fixer' binary, e.g. List("sudo", "nexus-fixer")
     */
-  final case class StorageConfig(rootVolume: Path, protectedDirectory: Path)
+  final case class StorageConfig(rootVolume: Path,
+                                 protectedDirectory: Path,
+                                 fixerEnabled: Boolean,
+                                 fixerCommand: List[String])
 
   /**
     * Allowed subject to perform calls to this service

@@ -4,8 +4,16 @@ Boolean isPR = env.CHANGE_ID != null
 
 pipeline {
     agent { label 'slave-sbt' }
+    tools {
+        jdk 'jdk11'
+    }
     options {
         timeout(time: 30, unit: 'MINUTES') 
+    }
+    environment {
+        NEXUS_PATH_PREFIX = """${sh(returnStdout: true, script: 'oc get configmap storage -o jsonpath="{.data.path_prefix}"')}"""
+        NEXUS_USER_ID = """${sh(returnStdout: true, script: 'oc get configmap storage -o jsonpath="{.data.user_id}"')}"""
+        NEXUS_GROUP_ID = """${sh(returnStdout: true, script: 'oc get configmap storage -o jsonpath="{.data.group_id}"')}"""
     }
     stages {
         stage("Review") {
@@ -39,6 +47,7 @@ pipeline {
             }
             steps {
                 checkout scm
+                sh 'echo $NEXUS_PATH_PREFIX $NEXUS_USER_ID $NEXUS_GROUP_ID'
                 sh 'sbt releaseEarly universal:packageZipTarball'
                 stash name: "service", includes: "target/universal/storage-*.tgz"
             }

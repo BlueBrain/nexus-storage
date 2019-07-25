@@ -86,8 +86,9 @@ lazy val storage = project
       mockito         % Test,
       scalaTest       % Test
     ),
+    cleanFiles += baseDirectory.value / "permissions-fixer" / "target" / "**",
     mappings in Universal := {
-      val universalMappings = (mappings in Universal).value
+      val universalMappings = (mappings in Universal).value :+ cargo.value
       universalMappings.foldLeft(Vector.empty[(File, String)]) {
         case (acc, (file, filename)) if filename.contains("kanela-agent") =>
           acc :+ (file, "lib/instrumentation-agent.jar")
@@ -127,6 +128,22 @@ lazy val buildInfoSettings = Seq(
   buildInfoKeys    := Seq[BuildInfoKey](version),
   buildInfoPackage := "ch.epfl.bluebrain.nexus.storage.config"
 )
+
+lazy val cargo = taskKey[(File, String)]("Run Cargo to build 'nexus-fixer'")
+
+cargo := {
+  import scala.sys.process._
+
+  val log = streams.value.log
+  val cmd = Process(Seq("cargo", "build", "--release"), baseDirectory.value / "permissions-fixer")
+  if ((cmd !) == 0) {
+    log.success("Cargo build successful.")
+    (baseDirectory.value / "permissions-fixer" / "target" / "release" / "nexus-fixer") -> "bin/nexus-fixer"
+  } else {
+    log.error("Cargo build failed.")
+    throw new RuntimeException
+  }
+}
 
 inThisBuild(
   List(

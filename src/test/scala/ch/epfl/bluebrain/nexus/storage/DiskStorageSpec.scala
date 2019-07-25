@@ -15,7 +15,7 @@ import ch.epfl.bluebrain.nexus.commons.test.Randomness
 import ch.epfl.bluebrain.nexus.commons.test.io.IOEitherValues
 import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
 import ch.epfl.bluebrain.nexus.storage.Rejection.{PathAlreadyExists, PathNotFound}
-import ch.epfl.bluebrain.nexus.storage.StorageError.PathInvalid
+import ch.epfl.bluebrain.nexus.storage.StorageError.{PathInvalid, PermissionsFixingFailed}
 import ch.epfl.bluebrain.nexus.storage.Storages.DiskStorage
 import ch.epfl.bluebrain.nexus.storage.Storages.PathExistence.{PathDoesNotExist, PathExists}
 import ch.epfl.bluebrain.nexus.storage.Storages.BucketExistence.{BucketDoesNotExist, BucketExists}
@@ -45,11 +45,11 @@ class DiskStorageSpec
   implicit val ec: ExecutionContext = system.dispatcher
   implicit val mt: Materializer     = ActorMaterializer()
 
-  val rootPath               = Files.createTempDirectory("storage-test")
-  val sConfig                = StorageConfig(rootPath, Paths.get("nexus"))
-  val dConfig                = DigestConfig("SHA-256", 1L, 1, 1, 1 second)
-  val cache: DigestCache[IO] = mock[DigestCache[IO]]
-  val storage                = new DiskStorage[IO](sConfig, dConfig, cache)
+  val rootPath = Files.createTempDirectory("storage-test")
+  val sConfig  = StorageConfig(rootPath, Paths.get("nexus"), true, List("/bin/echo"))
+  val dConfig  = DigestConfig("SHA-256", 1L, 1, 1, 1 second)
+  val cache    = mock[DigestCache[IO]]
+  val storage  = new DiskStorage[IO](sConfig, dConfig, cache)
 
   override def afterAll(): Unit = {
     FileUtils.deleteDirectory(rootPath.toFile)
@@ -149,6 +149,18 @@ class DiskStorageSpec
     "linking" should {
       implicit val bucketExistsEvidence = BucketExists
 
+      "fail when call to nexus-fixer fails" in new AbsoluteDirectoryCreated {
+        val badStorage   = new DiskStorage[IO](sConfig.copy(fixerCommand = List("/bin/false")), dConfig, cache)
+        val file         = "some/folder/myfile.txt"
+        val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
+        Files.createDirectories(absoluteFile.getParent)
+        Files.write(absoluteFile, "something".getBytes(StandardCharsets.UTF_8))
+
+        badStorage
+          .moveFile(name, Uri.Path(file), Uri.Path(genString()))
+          .failed[StorageError] shouldEqual PermissionsFixingFailed(absoluteFile.toString, "")
+      }
+
       "fail when source does not exists" in new AbsoluteDirectoryCreated {
         val source = genString()
         storage.moveFile(name, Uri.Path(source), Uri.Path(genString())).rejected[PathNotFound] shouldEqual
@@ -166,7 +178,7 @@ class DiskStorageSpec
       }
 
       "fail when destination already exists" in new AbsoluteDirectoryCreated {
-        val file         = s"some/folder/myfile.txt"
+        val file         = "some/folder/myfile.txt"
         val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
         Files.createDirectories(absoluteFile.getParent)
         Files.write(absoluteFile, "something".getBytes(StandardCharsets.UTF_8))
@@ -180,7 +192,7 @@ class DiskStorageSpec
       }
 
       "fail when destination is out of bucket scope" in new AbsoluteDirectoryCreated {
-        val file         = s"some/folder/myfile.txt"
+        val file         = "some/folder/myfile.txt"
         val dest         = Uri.Path("../some/other.txt")
         val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
         Files.createDirectories(absoluteFile.getParent)
@@ -194,7 +206,7 @@ class DiskStorageSpec
       }
 
       "pass on file" in new AbsoluteDirectoryCreated {
-        val file         = s"some/folder/myfile.txt"
+        val file         = "some/folder/myfile.txt"
         val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
         Files.createDirectories(absoluteFile.getParent)
 
@@ -208,7 +220,7 @@ class DiskStorageSpec
       }
 
       "pass on directory" in new AbsoluteDirectoryCreated {
-        val dir         = s"some/folder"
+        val dir         = "some/folder"
         val absoluteDir = baseRootPath.resolve(Paths.get(dir.toString))
         Files.createDirectories(absoluteDir)
 
