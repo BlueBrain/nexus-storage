@@ -46,7 +46,7 @@ class DiskStorageSpec
   implicit val mt: Materializer     = ActorMaterializer()
 
   val rootPath = Files.createTempDirectory("storage-test")
-  val sConfig  = StorageConfig(rootPath, Paths.get("nexus"), true, Paths.get("/bin/echo"))
+  val sConfig  = StorageConfig(rootPath, Paths.get("nexus"), true, List("/bin/echo"))
   val dConfig  = DigestConfig("SHA-256", 1L, 1, 1, 1 second)
   val cache    = mock[DigestCache[IO]]
   val storage  = new DiskStorage[IO](sConfig, dConfig, cache)
@@ -150,7 +150,7 @@ class DiskStorageSpec
       implicit val bucketExistsEvidence = BucketExists
 
       "fail when call to nexus-fixer fails" in new AbsoluteDirectoryCreated {
-        val badStorage   = new DiskStorage[IO](sConfig.copy(fixerBinary = Paths.get("/bin/false")), dConfig, cache)
+        val badStorage   = new DiskStorage[IO](sConfig.copy(fixerCommand = List("/bin/false")), dConfig, cache)
         val file         = "some/folder/myfile.txt"
         val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
         Files.createDirectories(absoluteFile.getParent)
@@ -158,7 +158,7 @@ class DiskStorageSpec
 
         badStorage
           .moveFile(name, Uri.Path(file), Uri.Path(genString()))
-          .failed[StorageError] shouldEqual PermissionsFixingFailed(absoluteFile, "")
+          .failed[StorageError] shouldEqual PermissionsFixingFailed(absoluteFile.toString, "")
       }
 
       "fail when source does not exists" in new AbsoluteDirectoryCreated {

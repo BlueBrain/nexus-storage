@@ -170,11 +170,10 @@ object Storages {
       val absDestPath         = filePath(name, destRelativePath)
 
       def fixPermissions(path: Path): F[Unit] =
-        if (config.fixPermissions) {
-          val absPath  = path.toAbsolutePath.normalize
-          val cmd      = config.fixerBinary.toString
-          val process  = Process(cmd, List(absPath.toString))
-          val logger   = new StringProcessLogger(cmd)
+        if (config.fixerEnabled) {
+          val absPath  = path.toAbsolutePath.normalize.toString
+          val process  = Process(config.fixerCommand :+ absPath)
+          val logger   = StringProcessLogger(config.fixerCommand, absPath)
           val exitCode = process ! logger
           if (exitCode == 0) F.unit
           else F.raiseError(PermissionsFixingFailed(absPath, logger.toString))
@@ -184,8 +183,8 @@ object Storages {
 
       def computeSizeAndMove(): F[RejOrAttributes] =
         size(absSourcePath).flatMap { computedSize =>
-          F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
-            fixPermissions(absSourcePath) >>
+          fixPermissions(absSourcePath) >>
+            F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
             F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
             F.pure(cache.asyncComputePut(absDestPath, digestConfig.algorithm)) >>
             F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize, Digest.empty)))

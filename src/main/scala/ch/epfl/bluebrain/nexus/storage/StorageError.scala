@@ -1,7 +1,5 @@
 package ch.epfl.bluebrain.nexus.storage
 
-import java.nio.file.{Path => JPath}
-
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.Uri.Path
 import ch.epfl.bluebrain.nexus.commons.http.directives.StatusFrom
@@ -74,7 +72,7 @@ object StorageError {
     * @param path    the absolute path to the file
     * @param message the error message returned by the system call
     */
-  final case class PermissionsFixingFailed(path: JPath, message: String)
+  final case class PermissionsFixingFailed(path: String, message: String)
       extends StorageError(s"Fixing permissions on the path '$path' failed with an error: $message")
 
   /**
@@ -85,8 +83,6 @@ object StorageError {
   final case class OperationTimedOut(override val msg: String) extends StorageError(msg)
 
   private implicit val config: Configuration = Configuration.default.withDiscriminator("@type")
-
-  private implicit val javaPathEncoder: Encoder[JPath] = Encoder.encodeString.contramap(_.toString)
 
   private val derivedEncoder = deriveEncoder[StorageError].mapJson(jsonError)
 
