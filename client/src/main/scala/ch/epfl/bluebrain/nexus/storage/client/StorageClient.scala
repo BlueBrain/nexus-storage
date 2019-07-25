@@ -32,6 +32,7 @@ import journal.Logger
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 class StorageClient[F[_]] private[client] (
     config: StorageClientConfig,
@@ -171,8 +172,14 @@ object StorageClient {
         }
       }
 
+    private def handleError[B](req: HttpRequest): Throwable => F[B] = {
+      case NonFatal(th) =>
+        logger.error(s"Unexpected response for Storage call. Request: '${req.method} ${req.uri}'", th)
+        F.raiseError(UnknownError(StatusCodes.InternalServerError, th.getMessage))
+    }
+
     override def apply(req: HttpRequest): F[A] =
-      cl.apply(req).flatMap { resp =>
+      cl(req).handleErrorWith(handleError(req)).flatMap { resp =>
         resp.status match {
           case StatusCodes.Unauthorized =>
             cl.toString(resp.entity).flatMap { entityAsString =>
