@@ -7,7 +7,7 @@ Use [rustup](https://rustup.rs).
 ### Build with custom configuration
 
 ```bash
-NEXUS_PATH_PREFIX=/path/to/gpfs/ NEXUS_USER_NAME=bbp.gpfs.nexus NEXUS_GROUP_NAME=bbp cargo build --release
+NEXUS_PATH_PREFIX=/path/to/gpfs/ NEXUS_USER_ID=12345 NEXUS_GROUP_ID=67890 cargo build --release
 ```
 
 ### Usage
