@@ -60,7 +60,7 @@ lazy val scalaTest       = "org.scalatest"           %% "scalatest"             
 
 lazy val storage = project
   .in(file("."))
-  .settings(testSettings, buildInfoSettings)
+  .settings(assemblySettings, testSettings, buildInfoSettings)
   .enablePlugins(BuildInfoPlugin, ServicePackagingPlugin)
   .aggregate(client)
   .settings(
@@ -86,7 +86,10 @@ lazy val storage = project
       mockito         % Test,
       scalaTest       % Test
     ),
-    cleanFiles += baseDirectory.value / "permissions-fixer" / "target" / "**",
+    cleanFiles ++= Seq(
+      baseDirectory.value / "permissions-fixer" / "target" / "**",
+      baseDirectory.value / "nexus-storage.jar"
+    ),
     mappings in Universal := {
       val universalMappings = (mappings in Universal).value :+ cargo.value
       universalMappings.foldLeft(Vector.empty[(File, String)]) {
@@ -100,6 +103,7 @@ lazy val storage = project
 
 lazy val client = project
   .in(file("client"))
+  .disablePlugins(AssemblyPlugin)
   .settings(
     testSettings,
     name                  := "storage-client",
@@ -118,6 +122,18 @@ lazy val client = project
       scalaTest       % Test,
     )
   )
+
+lazy val assemblySettings = Seq(
+  test in assembly               := {},
+  assemblyOutputPath in assembly := baseDirectory.value / "nexus-storage.jar",
+  assemblyMergeStrategy in assembly := {
+    case PathList("org", "apache", "commons", "logging", xs @ _*) => MergeStrategy.last
+    case "META-INF/versions/9/module-info.class"                  => MergeStrategy.discard
+    case x =>
+      val oldStrategy = (assemblyMergeStrategy in assembly).value
+      oldStrategy(x)
+  }
+)
 
 lazy val testSettings = Seq(
   Test / testOptions       += Tests.Argument(TestFrameworks.ScalaTest, "-o", "-u", "target/test-reports"),
