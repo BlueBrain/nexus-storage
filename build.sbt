@@ -32,8 +32,8 @@ val alpakkaVersion        = "1.1.0"
 val catsVersion           = "1.6.1"
 val catsEffectVersion     = "1.3.1"
 val circeVersion          = "0.11.1"
-val commonsVersion        = "0.17.1"
-val iamVersion            = "a9776720"
+val commonsVersion        = "0.17.2"
+val iamVersion            = "71232da8"
 val mockitoVersion        = "1.5.12"
 val monixVersion          = "3.0.0-RC3"
 val pureconfigVersion     = "0.11.1"
@@ -60,7 +60,7 @@ lazy val scalaTest       = "org.scalatest"           %% "scalatest"             
 
 lazy val storage = project
   .in(file("."))
-  .settings(testSettings, buildInfoSettings)
+  .settings(assemblySettings, testSettings, buildInfoSettings)
   .enablePlugins(BuildInfoPlugin, ServicePackagingPlugin)
   .aggregate(client)
   .settings(
@@ -86,7 +86,10 @@ lazy val storage = project
       mockito         % Test,
       scalaTest       % Test
     ),
-    cleanFiles += baseDirectory.value / "permissions-fixer" / "target" / "**",
+    cleanFiles ++= Seq(
+      baseDirectory.value / "permissions-fixer" / "target" / "**",
+      baseDirectory.value / "nexus-storage.jar"
+    ),
     mappings in Universal := {
       val universalMappings = (mappings in Universal).value :+ cargo.value
       universalMappings.foldLeft(Vector.empty[(File, String)]) {
@@ -100,6 +103,7 @@ lazy val storage = project
 
 lazy val client = project
   .in(file("client"))
+  .disablePlugins(AssemblyPlugin)
   .settings(
     testSettings,
     name                  := "storage-client",
@@ -118,6 +122,18 @@ lazy val client = project
       scalaTest       % Test,
     )
   )
+
+lazy val assemblySettings = Seq(
+  test in assembly               := {},
+  assemblyOutputPath in assembly := baseDirectory.value / "nexus-storage.jar",
+  assemblyMergeStrategy in assembly := {
+    case PathList("org", "apache", "commons", "logging", xs @ _*) => MergeStrategy.last
+    case "META-INF/versions/9/module-info.class"                  => MergeStrategy.discard
+    case x =>
+      val oldStrategy = (assemblyMergeStrategy in assembly).value
+      oldStrategy(x)
+  }
+)
 
 lazy val testSettings = Seq(
   Test / testOptions       += Tests.Argument(TestFrameworks.ScalaTest, "-o", "-u", "target/test-reports"),
