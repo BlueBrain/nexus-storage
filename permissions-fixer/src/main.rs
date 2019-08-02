@@ -3,7 +3,7 @@ use clap::{App, Arg};
 use crate::config::show_config;
 use crate::errors::Failure;
 use crate::errors::Failure::PathCannotBeEmpty;
-use crate::path::*;
+use crate::path::apply_permissions;
 
 mod config;
 mod errors;
@@ -35,9 +35,7 @@ fn main() -> Result<(), Failure> {
     }
 
     match args.value_of("PATH") {
-        Some(path) => check_path(path)
-            .and_then(visit_all)
-            .map(|_| println!("Done.")),
+        Some(path) => apply_permissions(path).map(|_| println!("Done.")),
         None => Err(PathCannotBeEmpty),
     }
 }

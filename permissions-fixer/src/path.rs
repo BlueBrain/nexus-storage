@@ -1,14 +1,20 @@
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 use libc::{chmod, chown};
+use walkdir::WalkDir;
 
 use crate::config::*;
 use crate::errors::Failure;
 use crate::errors::Failure::*;
 
-pub fn check_path(path: &str) -> Result<&Path, Failure> {
+pub fn apply_permissions(path: &str) -> Result<(), Failure> {
+    check_path(path).and_then(check_links).and_then(visit_all)
+}
+
+fn check_path(path: &str) -> Result<&Path, Failure> {
     let p = Path::new(path);
     if p.is_relative() {
         Err(PathMustBeAbsolute)
@@ -23,19 +29,41 @@ pub fn check_path(path: &str) -> Result<&Path, Failure> {
     }
 }
 
-pub fn visit_all(path: &Path) -> Result<(), Failure> {
-    if path.is_dir() {
-        for entry in path.read_dir()? {
-            let entry = entry?;
-            visit_all(&entry.path())?;
+fn check_links(path: &Path) -> Result<&Path, Failure> {
+    let result: Result<Vec<bool>, Failure> = WalkDir::new(path)
+        .into_iter()
+        .map(|e| {
+            let entry = e?;
+            let meta = entry.metadata()?;
+            Ok(entry.path_is_symlink() || (meta.is_file() && meta.nlink() > 1))
+        })
+        .collect();
+    result.and_then(|links| {
+        if links.into_iter().any(|b| b) {
+            Err(PathCannotContainLinks)
+        } else {
+            Ok(path)
         }
-        set_owner(path).and_then(|_| set_permissions(path, DIR_MASK))
-    } else {
-        set_owner(path).and_then(|_| set_permissions(path, FILE_MASK))
-    }
+    })
 }
 
-pub fn set_owner(path: &Path) -> Result<(), Failure> {
+fn visit_all(path: &Path) -> Result<(), Failure> {
+    let result: Result<Vec<()>, Failure> = WalkDir::new(path)
+        .into_iter()
+        .map(|e| {
+            let entry = e?;
+            let p = entry.path();
+            if p.is_dir() {
+                set_owner(p).and_then(|_| set_permissions(p, DIR_MASK))
+            } else {
+                set_owner(p).and_then(|_| set_permissions(p, FILE_MASK))
+            }
+        })
+        .collect();
+    result.map(|_| ())
+}
+
+fn set_owner(path: &Path) -> Result<(), Failure> {
     let p = CString::new(path.as_os_str().as_bytes()).map_err(|_| PathCannotHaveNull)?;
     let uid = get_uid()?;
     let gid = get_gid()?;
@@ -47,7 +75,7 @@ pub fn set_owner(path: &Path) -> Result<(), Failure> {
     }
 }
 
-pub fn set_permissions(path: &Path, mask: u32) -> Result<(), Failure> {
+fn set_permissions(path: &Path, mask: u32) -> Result<(), Failure> {
     let p = CString::new(path.as_os_str().as_bytes()).map_err(|_| PathCannotHaveNull)?;
     let chmod = unsafe { chmod(p.as_ptr() as *const i8, mask) };
     if chmod == 0 {
@@ -61,7 +89,7 @@ pub fn set_permissions(path: &Path, mask: u32) -> Result<(), Failure> {
 mod tests {
     use std::fs;
     use std::io;
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
 
     use rand::{thread_rng, Rng};
 
@@ -69,6 +97,7 @@ mod tests {
 
     #[test]
     fn test_check_path() {
+        setup();
         assert_eq!(check_path("../foo"), Err(PathMustBeAbsolute));
         assert_eq!(check_path("/foo"), Err(PathMustStartWithPrefix));
         assert_eq!(check_path("/tmp/nexus-fixer/bar"), Err(FileNotFound));
@@ -82,6 +111,7 @@ mod tests {
 
     #[test]
     fn test_set_owner() {
+        setup();
         let p = Path::new("/tmp/nexus-fixer/baz");
         assert!(touch(p).is_ok());
         assert!(set_owner(p).is_ok());
@@ -90,19 +120,49 @@ mod tests {
             get_uid().expect("failed to read UID"),
             get_gid().expect("failed to read GID"),
         );
+        assert!(fs::remove_file(p).is_ok());
     }
 
     #[test]
     fn test_set_permissions() {
+        setup();
         let p = Path::new("/tmp/nexus-fixer/qux");
         let mask = random_mask();
         assert!(touch(p).is_ok());
         assert!(set_permissions(p, mask).is_ok());
         check_permissions(p, mask);
+        assert!(fs::remove_file(p).is_ok());
+    }
+
+    #[test]
+    fn test_check_links() {
+        setup();
+        let p = Path::new("/tmp/nexus-fixer/d/e/f");
+        assert!(fs::create_dir_all(p).is_ok());
+        let file_a = Path::new("/tmp/nexus-fixer/d/file_a");
+        let file_b = Path::new("/tmp/nexus-fixer/d/e/file_b");
+        let file_c = Path::new("/tmp/nexus-fixer/d/e/f/file_c");
+        assert!(touch(file_a).is_ok());
+        assert!(touch(file_b).is_ok());
+        assert!(touch(file_c).is_ok());
+
+        let toplevel = Path::new("/tmp/nexus-fixer/d");
+        assert!(check_links(toplevel).is_ok());
+
+        let softlink = Path::new("/tmp/nexus-fixer/d/symlink");
+        assert!(symlink(file_a, softlink).is_ok());
+        assert_eq!(check_links(toplevel), Err(PathCannotContainLinks));
+        assert!(fs::remove_file(softlink).is_ok());
+
+        let hardlink = Path::new("/tmp/nexus-fixer/d/hardlink");
+        assert!(fs::hard_link(file_b, hardlink).is_ok());
+        assert_eq!(check_links(toplevel), Err(PathCannotContainLinks));
+        assert!(fs::remove_dir_all(toplevel).is_ok());
     }
 
     #[test]
     fn test_visit_all() {
+        setup();
         let p = Path::new("/tmp/nexus-fixer/a/b/c");
         assert!(fs::create_dir_all(p).is_ok());
         let file_a = Path::new("/tmp/nexus-fixer/a/file_a");
@@ -130,6 +190,7 @@ mod tests {
         check_owner(file_b, uid, gid);
         check_permissions(file_c, FILE_MASK);
         check_owner(file_c, uid, gid);
+        assert!(fs::remove_dir_all(Path::new("/tmp/nexus-fixer/a")).is_ok());
     }
 
     fn check_owner(path: &Path, uid: u32, gid: u32) {
@@ -153,5 +214,9 @@ mod tests {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
         }
+    }
+
+    fn setup() {
+        assert!(fs::create_dir_all("/tmp/nexus-fixer").is_ok());
     }
 }
