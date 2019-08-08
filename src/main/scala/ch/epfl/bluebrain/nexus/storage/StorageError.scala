@@ -54,7 +54,8 @@ object StorageError {
     */
   final case class PathNotFound(name: String, path: Path)
       extends StorageError(
-        s"The provided location inside the bucket '$name' with the relative path '$path' does not exist.")
+        s"The provided location inside the bucket '$name' with the relative path '$path' does not exist."
+      )
 
   /**
     * Signals an attempt to interact with a path that is invalid.
@@ -64,7 +65,8 @@ object StorageError {
     */
   final case class PathInvalid(name: String, path: Path)
       extends StorageError(
-        s"The provided location inside the bucket '$name' with the relative path '$path' is invalid.")
+        s"The provided location inside the bucket '$name' with the relative path '$path' is invalid."
+      )
 
   /**
     * Signals that the system call to the 'nexus-fixer' binary failed.

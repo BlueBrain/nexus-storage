@@ -119,7 +119,7 @@ lazy val client = project
       akkaHttpTestKit % Test,
       commonsTest     % Test,
       mockito         % Test,
-      scalaTest       % Test,
+      scalaTest       % Test
     )
   )
 

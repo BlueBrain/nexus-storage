@@ -42,9 +42,11 @@ object DigestComputation {
     * @tparam F the effect type
     * @return a DigestComputation implemented for a source of type AkkaSource
     */
-  implicit def akkaDigest[F[_]](implicit ec: ExecutionContext,
-                                mt: Materializer,
-                                F: Effect[F]): DigestComputation[F, AkkaSource] =
+  implicit def akkaDigest[F[_]](
+      implicit ec: ExecutionContext,
+      mt: Materializer,
+      F: Effect[F]
+  ): DigestComputation[F, AkkaSource] =
     (path: Path, algorithm: String) => {
       if (!Files.exists(path)) F.raiseError(InternalError(s"Path not found '$path'"))
       else

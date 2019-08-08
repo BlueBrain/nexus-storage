@@ -26,9 +26,10 @@ import scala.concurrent.duration._
   * @tparam F the effect type
   * @tparam S the source of the storage computation
   */
-class DigestCacheActor[F[_]: Effect, S](computation: DigestComputation[F, S])(implicit config: DigestConfig,
-                                                                              clock: Clock)
-    extends Actor
+class DigestCacheActor[F[_]: Effect, S](computation: DigestComputation[F, S])(
+    implicit config: DigestConfig,
+    clock: Clock
+) extends Actor
     with ActorLogging {
 
   import context.dispatcher
@@ -72,9 +73,11 @@ class DigestCacheActor[F[_]: Effect, S](computation: DigestComputation[F, S])(im
           sender() ! Digest.empty
 
         case Some(Left(_)) =>
-          log.warning("Digest for file '{}' is being computed but the elapsed time of '{}' expired.",
-                      filePath,
-                      config.retriggerAfter)
+          log.warning(
+            "Digest for file '{}' is being computed but the elapsed time of '{}' expired.",
+            filePath,
+            config.retriggerAfter
+          )
           sender() ! Digest.empty
           self ! Compute(filePath)
 
