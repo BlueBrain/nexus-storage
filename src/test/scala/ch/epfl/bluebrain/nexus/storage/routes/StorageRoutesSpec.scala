@@ -86,8 +86,11 @@ class StorageRoutesSpec
           storages.exists(name) wasCalled once
           responseAs[Json] shouldEqual jsonContentOf(
             "/error.json",
-            Map(quote("{type}")   -> "BucketNotFound",
-                quote("{reason}") -> s"The provided bucket '$name' does not exist."))
+            Map(
+              quote("{type}")   -> "BucketNotFound",
+              quote("{reason}") -> s"The provided bucket '$name' does not exist."
+            )
+          )
         }
       }
 
@@ -152,8 +155,10 @@ class StorageRoutesSpec
               quote("{reason}") -> s"The system experienced an unexpected error, please try again later."
             )
           )
-          storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(eqTo(BucketExists),
-                                                                              eqTo(PathDoesNotExist)) wasCalled once
+          storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(
+            eqTo(BucketExists),
+            eqTo(PathDoesNotExist)
+          ) wasCalled once
         }
       }
 
@@ -164,7 +169,8 @@ class StorageRoutesSpec
         storages.exists(name) shouldReturn BucketExists
         storages.pathExists(name, filePathUri) shouldReturn PathDoesNotExist
         storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(eqTo(BucketExists), eqTo(PathDoesNotExist)) shouldReturn Task(
-          attributes)
+          attributes
+        )
 
         Put(s"/v1/buckets/$name/files/path/to/file/$filename", multipartForm) ~> route ~> check {
           status shouldEqual Created
@@ -177,8 +183,10 @@ class StorageRoutesSpec
               quote("{value}")     -> attributes.digest.value
             )
           )
-          storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(eqTo(BucketExists),
-                                                                              eqTo(PathDoesNotExist)) wasCalled once
+          storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(
+            eqTo(BucketExists),
+            eqTo(PathDoesNotExist)
+          ) wasCalled once
         }
       }
     }
@@ -235,8 +243,10 @@ class StorageRoutesSpec
           status shouldEqual BadRequest
           responseAs[Json] shouldEqual jsonContentOf(
             "/error.json",
-            Map(quote("{type}")   -> "PathInvalid",
-                quote("{reason}") -> s"The provided location inside the bucket '$name' with the relative path '$source' is invalid.")
+            Map(
+              quote("{type}")   -> "PathInvalid",
+              quote("{reason}") -> s"The provided location inside the bucket '$name' with the relative path '$source' is invalid."
+            )
           )
         }
       }
@@ -247,7 +257,8 @@ class StorageRoutesSpec
         val dest       = "dest/dir"
         val attributes = FileAttributes(s"file://some/prefix/$dest", 12L, Digest.empty)
         storages.moveFile(name, Uri.Path(source), Uri.Path(dest))(BucketExists) shouldReturn Task.pure(
-          Right(attributes))
+          Right(attributes)
+        )
 
         val json = jsonContentOf("/file-link.json", Map(quote("{source}") -> source))
 
@@ -366,8 +377,10 @@ class StorageRoutesSpec
 
         Get(s"/v1/buckets/$name/digests/$filename") ~> Accept(`*/*`) ~> route ~> check {
           status shouldEqual OK
-          responseAs[Json] shouldEqual Json.obj("_algorithm" -> Json.fromString(digest.algorithm),
-                                                "_value"     -> Json.fromString(digest.value))
+          responseAs[Json] shouldEqual Json.obj(
+            "_algorithm" -> Json.fromString(digest.algorithm),
+            "_value"     -> Json.fromString(digest.value)
+          )
           storages.getDigest(name, filePathUri) wasCalled once
         }
       }

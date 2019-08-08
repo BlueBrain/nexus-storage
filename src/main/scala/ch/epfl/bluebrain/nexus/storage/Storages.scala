@@ -52,7 +52,8 @@ trait Storages[F[_], Source] {
     */
   def createFile(name: String, relativePath: Uri.Path, source: Source)(
       implicit @silent bucketEv: BucketExists,
-      @silent pathEv: PathDoesNotExist): F[FileAttributes]
+      @silent pathEv: PathDoesNotExist
+  ): F[FileAttributes]
 
   /**
     * Moves a path from the provided ''sourceRelativePath'' to ''destRelativePath'' inside the nexus folder.
@@ -64,7 +65,8 @@ trait Storages[F[_], Source] {
     *         The file attributes contain the metadata (bytes and location) wrapped in an F effect type
     */
   def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
-      implicit @silent bucketEv: BucketExists): F[RejOrAttributes]
+      implicit @silent bucketEv: BucketExists
+  ): F[RejOrAttributes]
 
   /**
     * Retrieves the file as a Source.
@@ -73,8 +75,10 @@ trait Storages[F[_], Source] {
     * @param relativePath the relative path to the file location
     * @return Left(rejection),  Right(source, Some(filename)) when the path is a file and Right(source, None) when the path is a directory
     */
-  def getFile(name: String, relativePath: Uri.Path)(implicit @silent bucketEv: BucketExists,
-                                                    @silent pathEv: PathExists): RejOr[(Source, Option[String])]
+  def getFile(name: String, relativePath: Uri.Path)(
+      implicit @silent bucketEv: BucketExists,
+      @silent pathEv: PathExists
+  ): RejOr[(Source, Option[String])]
 
   /**
     * Retrieves the digest of the file.
@@ -82,8 +86,10 @@ trait Storages[F[_], Source] {
     * @param name         the storage bucket name
     * @param relativePath the relative path to the file location
     */
-  def getDigest(name: String, relativePath: Uri.Path)(implicit @silent bucketEv: BucketExists,
-                                                      @silent pathEv: PathExists): F[Digest]
+  def getDigest(name: String, relativePath: Uri.Path)(
+      implicit @silent bucketEv: BucketExists,
+      @silent pathEv: PathExists
+  ): F[Digest]
 
 }
 
@@ -112,8 +118,8 @@ object Storages {
   final class DiskStorage[F[_]](config: StorageConfig, digestConfig: DigestConfig, cache: DigestCache[F])(
       implicit ec: ExecutionContext,
       mt: Materializer,
-      F: Effect[F])
-      extends Storages[F, AkkaSource] {
+      F: Effect[F]
+  ) extends Storages[F, AkkaSource] {
 
     private def basePath(name: String, protectedDir: Boolean = true): Path = {
       val path = config.rootVolume.resolve(name).normalize()
@@ -138,7 +144,8 @@ object Storages {
 
     def createFile(name: String, relativeFilePath: Uri.Path, source: AkkaSource)(
         implicit @silent bucketEv: BucketExists,
-        @silent pathEv: PathDoesNotExist): F[FileAttributes] = {
+        @silent pathEv: PathDoesNotExist
+    ): F[FileAttributes] = {
       val absFilePath = filePath(name, relativeFilePath)
       if (absFilePath.descendantOf(basePath(name)))
         F.fromTry(Try(Files.createDirectories(absFilePath.getParent))) >>
@@ -162,7 +169,8 @@ object Storages {
     }
 
     def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
-        implicit bucketEv: BucketExists): F[RejOrAttributes] = {
+        implicit bucketEv: BucketExists
+    ): F[RejOrAttributes] = {
 
       val bucketPath          = basePath(name, protectedDir = false)
       val bucketProtectedPath = basePath(name)
@@ -217,17 +225,20 @@ object Storages {
         } else F.pure(Left(PathNotFound(name, sourceRelativePath)))
     }
 
-    def getFile(name: String, relativePath: Uri.Path)(
-        implicit @silent bucketEv: BucketExists,
-        @silent pathEv: PathExists): RejOr[(AkkaSource, Option[String])] = {
+    def getFile(
+        name: String,
+        relativePath: Uri.Path
+    )(implicit @silent bucketEv: BucketExists, @silent pathEv: PathExists): RejOr[(AkkaSource, Option[String])] = {
       val absPath = filePath(name, relativePath)
       if (Files.isRegularFile(absPath)) Right(fileSource(absPath) -> Some(absPath.getFileName.toString))
       else if (Files.isDirectory(absPath)) Right(folderSource(absPath) -> None)
       else Left(PathNotFound(name, relativePath))
     }
 
-    def getDigest(name: String, relativePath: Uri.Path)(implicit bucketEv: BucketExists,
-                                                        pathEv: PathExists): F[Digest] =
+    def getDigest(
+        name: String,
+        relativePath: Uri.Path
+    )(implicit bucketEv: BucketExists, pathEv: PathExists): F[Digest] =
       cache.get(filePath(name, relativePath))
 
     private def containsHardLink(absPath: Path): Boolean =

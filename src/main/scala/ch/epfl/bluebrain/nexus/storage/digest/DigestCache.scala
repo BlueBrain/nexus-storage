@@ -39,16 +39,19 @@ trait DigestCache[F[_]] {
 object DigestCache {
   private[this] val logger = Logger[this.type]
 
-  def apply[F[_], Source](implicit system: ActorSystem,
-                          clock: Clock,
-                          tm: Timeout,
-                          F: Effect[F],
-                          computation: DigestComputation[F, Source],
-                          config: DigestConfig): DigestCache[F] =
+  def apply[F[_], Source](
+      implicit system: ActorSystem,
+      clock: Clock,
+      tm: Timeout,
+      F: Effect[F],
+      computation: DigestComputation[F, Source],
+      config: DigestConfig
+  ): DigestCache[F] =
     apply(system.actorOf(DigestCacheActor.props(computation)))
 
   private[digest] def apply[F[_]](
-      underlying: ActorRef)(implicit system: ActorSystem, tm: Timeout, F: Effect[F]): DigestCache[F] =
+      underlying: ActorRef
+  )(implicit system: ActorSystem, tm: Timeout, F: Effect[F]): DigestCache[F] =
     new DigestCache[F] {
 
       override def get(filePath: Path): F[Digest] =

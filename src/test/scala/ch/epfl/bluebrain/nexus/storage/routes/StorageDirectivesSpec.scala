@@ -21,7 +21,8 @@ class StorageDirectivesSpec extends WordSpecLike with Matchers with ScalatestRou
         "/error.json",
         Map(
           quote("{type}")   -> "PathInvalid",
-          quote("{reason}") -> s"The provided location inside the bucket 'name' with the relative path '$path' is invalid.")
+          quote("{reason}") -> s"The provided location inside the bucket 'name' with the relative path '$path' is invalid."
+        )
       )
 
     "dealing with file path extraction" should {

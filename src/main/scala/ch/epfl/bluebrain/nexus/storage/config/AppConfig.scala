@@ -20,12 +20,14 @@ import scala.concurrent.duration.FiniteDuration
   * @param iam         iam client configuration
   * @param digest      the digest configuration
   */
-final case class AppConfig(description: Description,
-                           http: HttpConfig,
-                           storage: StorageConfig,
-                           subject: SubjectConfig,
-                           iam: IamClientConfig,
-                           digest: DigestConfig)
+final case class AppConfig(
+    description: Description,
+    http: HttpConfig,
+    storage: StorageConfig,
+    subject: SubjectConfig,
+    iam: IamClientConfig,
+    digest: DigestConfig
+)
 
 object AppConfig {
 
@@ -66,10 +68,12 @@ object AppConfig {
     * @param fixerEnabled       call the permissions fixer when linking files, before they are moved
     * @param fixerCommand       the command and arguments to call the 'nexus-fixer' binary, e.g. List("sudo", "nexus-fixer")
     */
-  final case class StorageConfig(rootVolume: Path,
-                                 protectedDirectory: Path,
-                                 fixerEnabled: Boolean,
-                                 fixerCommand: List[String])
+  final case class StorageConfig(
+      rootVolume: Path,
+      protectedDirectory: Path,
+      fixerEnabled: Boolean,
+      fixerCommand: List[String]
+  )
 
   /**
     * Allowed subject to perform calls to this service
@@ -84,11 +88,13 @@ object AppConfig {
       case (false, Some(r), Some(s)) => User(s, r)
       case (false, _, _) =>
         throw new IllegalArgumentException(
-          "subject configuration is wrong. When anonymous is set to false, a realm and a subject must be provided")
+          "subject configuration is wrong. When anonymous is set to false, a realm and a subject must be provided"
+        )
       case (true, None, None) => Anonymous
       case _ =>
         throw new IllegalArgumentException(
-          "subject configuration is wrong. When anonymous is set to true, a realm and a subject should not be present")
+          "subject configuration is wrong. When anonymous is set to true, a realm and a subject should not be present"
+        )
     }
     // $COVERAGE-ON$
   }
@@ -102,11 +108,13 @@ object AppConfig {
     * @param maxInQueue             the maximum number of computations in queue to be computed
     * @param retriggerAfter         the amout of time after a digest which is still in the queue to be computed can be retrigger
     */
-  final case class DigestConfig(algorithm: String,
-                                maxInMemory: Long,
-                                concurrentComputations: Int,
-                                maxInQueue: Int,
-                                retriggerAfter: FiniteDuration)
+  final case class DigestConfig(
+      algorithm: String,
+      maxInMemory: Long,
+      concurrentComputations: Int,
+      maxInQueue: Int,
+      retriggerAfter: FiniteDuration
+  )
 
   implicit def toStorage(implicit config: AppConfig): StorageConfig = config.storage
   implicit def toHttp(implicit config: AppConfig): HttpConfig       = config.http
@@ -125,5 +133,6 @@ object AppConfig {
       "location",
       "bytes",
       ""
-    ))
+    )
+  )
 }

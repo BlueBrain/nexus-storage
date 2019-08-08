@@ -30,11 +30,11 @@ val akkaHttpVersion       = "10.1.9"
 val apacheCompressVersion = "1.18"
 val alpakkaVersion        = "1.1.0"
 val catsVersion           = "1.6.1"
-val catsEffectVersion     = "1.3.1"
+val catsEffectVersion     = "1.4.0"
 val circeVersion          = "0.11.1"
-val commonsVersion        = "0.17.2"
-val iamVersion            = "71232da8"
-val mockitoVersion        = "1.5.12"
+val commonsVersion        = "0.17.3"
+val iamVersion            = "9cf451a8"
+val mockitoVersion        = "1.5.13"
 val monixVersion          = "3.0.0-RC3"
 val pureconfigVersion     = "0.11.1"
 val scalaTestVersion      = "3.0.8"
@@ -119,7 +119,7 @@ lazy val client = project
       akkaHttpTestKit % Test,
       commonsTest     % Test,
       mockito         % Test,
-      scalaTest       % Test,
+      scalaTest       % Test
     )
   )
 

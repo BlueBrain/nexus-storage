@@ -69,7 +69,8 @@ class StorageClient[F[_]] private[client] (
     * @return The file attributes wrapped on the effect type F[] containing the metadata plus the file bytes, digest and location
     */
   def createFile(name: String, relativePath: Uri.Path, source: AkkaSource)(
-      implicit cred: Option[AuthToken]): F[FileAttributes] = {
+      implicit cred: Option[AuthToken]
+  ): F[FileAttributes] = {
     val endpoint       = config.files(name) + slashIfNone(relativePath).toIriPath
     val bodyPartEntity = HttpEntity.IndefiniteLength(ContentTypes.`application/octet-stream`, source)
     val filename       = extractName(relativePath).getOrElse("myfile")
@@ -119,7 +120,8 @@ class StorageClient[F[_]] private[client] (
     * @return The file attributes wrapped on the effect type F[] containing the metadata plus the file bytes, digest and location
     */
   def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
-      implicit cred: Option[AuthToken]): F[FileAttributes] = {
+      implicit cred: Option[AuthToken]
+  ): F[FileAttributes] = {
     val endpoint = (config.files(name) + slashIfNone(destRelativePath).toIriPath).toAkkaUri
     attributes(Put(endpoint, LinkFile(sourceRelativePath)).withCredentials)
   }
@@ -199,12 +201,12 @@ object StorageClient {
             val value = L.liftIO(IO.fromFuture(IO(um(resp.entity))))
             value.recoverWith {
               case pf: ParsingFailure =>
-                logger.error(
-                  s"Failed to parse a successful response of '${req.method.name()} ${req.getUri().toString}'.")
+                logger
+                  .error(s"Failed to parse a successful response of '${req.method.name()} ${req.getUri().toString}'.")
                 F.raiseError[A](UnmarshallingError(pf.getMessage()))
               case df: DecodingFailure =>
-                logger.error(
-                  s"Failed to decode a successful response of '${req.method.name()} ${req.getUri().toString}'.")
+                logger
+                  .error(s"Failed to decode a successful response of '${req.method.name()} ${req.getUri().toString}'.")
                 F.raiseError(UnmarshallingError(df.getMessage()))
             }
 
@@ -217,7 +219,8 @@ object StorageClient {
                 case "PathAlreadyExists" => F.raiseError(InvalidPath(msg))
                 case _ =>
                   logger.error(
-                    s"Received '${other.value}' when accessing '${req.method.name()} ${req.uri.toString()}', response entity as string: '$msg'")
+                    s"Received '${other.value}' when accessing '${req.method.name()} ${req.uri.toString()}', response entity as string: '$msg'"
+                  )
                   F.raiseError[A](UnknownError(other, msg))
 
               }
@@ -242,12 +245,14 @@ object StorageClient {
     implicit val mt: ActorMaterializer     = ActorMaterializer()
     implicit val ec: ExecutionContext      = as.dispatcher
     implicit val ucl: UntypedHttpClient[F] = HttpClient.untyped[F]
-    new StorageClient(config,
-                      httpClient[F, FileAttributes],
-                      httpClient[F, Digest],
-                      httpClient[F, AkkaSource],
-                      httpClient[F, ServiceDescription],
-                      httpClient[F, NotUsed])
+    new StorageClient(
+      config,
+      httpClient[F, FileAttributes],
+      httpClient[F, Digest],
+      httpClient[F, AkkaSource],
+      httpClient[F, ServiceDescription],
+      httpClient[F, NotUsed]
+    )
   }
 }
 // $COVERAGE-ON$

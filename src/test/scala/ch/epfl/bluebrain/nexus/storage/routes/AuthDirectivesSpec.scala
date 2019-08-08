@@ -70,7 +70,8 @@ class AuthDirectivesSpec
       "the client throws an error for caller" in {
         implicit val token: Option[AuthToken] = None
         iamClient.identities(any[Option[AuthToken]]) shouldReturn Task.raiseError(
-          IamClientError.UnknownError(StatusCodes.InternalServerError, ""))
+          IamClientError.UnknownError(StatusCodes.InternalServerError, "")
+        )
         val route = Routes.wrap(extractCaller.apply(_ => complete("")))
         Get("/") ~> route ~> check {
           status shouldEqual StatusCodes.InternalServerError
