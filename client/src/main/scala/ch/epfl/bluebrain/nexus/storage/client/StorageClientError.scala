@@ -21,6 +21,8 @@ object StorageClientError {
   final case class UnknownError(status: StatusCode, entityAsString: String)
       extends StorageClientError("The request did not complete successfully.")
 
+  final case object EmptyChunk extends StorageClientError("Chunk with empty data")
+
   final case class NotFound(reason: String) extends StorageClientError(reason)
 
   final case class InvalidPath(reason: String) extends StorageClientError(reason)
