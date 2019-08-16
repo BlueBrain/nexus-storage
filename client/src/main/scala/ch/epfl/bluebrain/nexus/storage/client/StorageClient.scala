@@ -43,8 +43,6 @@ class StorageClient[F[_]] private[client] (
     emptyBody: HttpClient[F, NotUsed]
 )(implicit F: Effect[F], ec: ExecutionContext) {
 
-  private val emptyChunk = "An HttpEntity.Chunk must have non-empty data"
-
   def serviceDescription: F[ServiceDescription] =
     serviceDesc(Get(config.iri.toAkkaUri))
 
@@ -76,9 +74,8 @@ class StorageClient[F[_]] private[client] (
     val filename       = extractName(relativePath).getOrElse("myfile")
     val multipartForm  = FormData(BodyPart("file", bodyPartEntity, Map("filename" -> filename))).toEntity()
     attributes(Put(endpoint.toAkkaUri, multipartForm).withCredentials).recoverWith {
-      case ex: IllegalArgumentException if ex.getMessage != null && ex.getMessage.endsWith(emptyChunk) =>
-        createFile(name, relativePath, Source.empty)
-      case ex => F.raiseError(ex)
+      case EmptyChunk => createFile(name, relativePath, Source.empty)
+      case ex         => F.raiseError(ex)
     }
   }
 
@@ -165,7 +162,8 @@ object StorageClient {
       cl: UntypedHttpClient[F],
       um: FromEntityUnmarshaller[A]
   ): HttpClient[F, A] = new HttpClient[F, A] {
-    private val logger = Logger(s"IamHttpClient[${implicitly[ClassTag[A]]}]")
+    private val logger     = Logger(s"IamHttpClient[${implicitly[ClassTag[A]]}]")
+    private val emptyChunk = "An HttpEntity.Chunk must have non-empty data"
 
     private def typeAndReason(string: String): Either[circe.Error, (String, String)] =
       parse(string).flatMap { json =>
@@ -175,6 +173,8 @@ object StorageClient {
       }
 
     private def handleError[B](req: HttpRequest): Throwable => F[B] = {
+      case NonFatal(ex: IllegalArgumentException) if ex.getMessage != null && ex.getMessage.endsWith(emptyChunk) =>
+        F.raiseError(EmptyChunk)
       case NonFatal(th) =>
         logger.error(s"Unexpected response for Storage call. Request: '${req.method} ${req.uri}'", th)
         F.raiseError(UnknownError(StatusCodes.InternalServerError, th.getMessage))
