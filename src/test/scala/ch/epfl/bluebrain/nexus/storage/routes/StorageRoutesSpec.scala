@@ -165,7 +165,7 @@ class StorageRoutesSpec
       "pass" in new RandomFileCreate {
         val absoluteFilePath = appConfig.storage.rootVolume.resolve(filePath)
         val digest           = Digest("SHA-256", genString())
-        val attributes       = FileAttributes(s"file://$absoluteFilePath", 12L, digest)
+        val attributes       = FileAttributes(s"file://$absoluteFilePath", 12L, digest, `application/octet-stream`)
         storages.exists(name) shouldReturn BucketExists
         storages.pathExists(name, filePathUri) shouldReturn PathDoesNotExist
         storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(eqTo(BucketExists), eqTo(PathDoesNotExist)) shouldReturn Task(
@@ -178,6 +178,7 @@ class StorageRoutesSpec
             "/file-created.json",
             Map(
               quote("{location}")  -> attributes.location.toString,
+              quote("{mediaType}") -> attributes.mediaType.value,
               quote("{bytes}")     -> attributes.bytes.toString,
               quote("{algorithm}") -> attributes.digest.algorithm,
               quote("{value}")     -> attributes.digest.value
@@ -255,10 +256,9 @@ class StorageRoutesSpec
         storages.exists(name) shouldReturn BucketExists
         val source     = "source/dir"
         val dest       = "dest/dir"
-        val attributes = FileAttributes(s"file://some/prefix/$dest", 12L, Digest.empty)
-        storages.moveFile(name, Uri.Path(source), Uri.Path(dest))(BucketExists) shouldReturn Task.pure(
-          Right(attributes)
-        )
+        val attributes = FileAttributes(s"file://some/prefix/$dest", 12L, Digest.empty, `application/octet-stream`)
+        storages.moveFile(name, Uri.Path(source), Uri.Path(dest))(BucketExists) shouldReturn
+          Task.pure(Right(attributes))
 
         val json = jsonContentOf("/file-link.json", Map(quote("{source}") -> source))
 
@@ -268,6 +268,7 @@ class StorageRoutesSpec
             "/file-created.json",
             Map(
               quote("{location}")  -> attributes.location.toString,
+              quote("{mediaType}") -> attributes.mediaType.value,
               quote("{bytes}")     -> attributes.bytes.toString,
               quote("{algorithm}") -> "",
               quote("{value}")     -> ""
