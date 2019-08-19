@@ -18,7 +18,7 @@ const GID: Option<&'static str> = option_env!("NEXUS_GROUP_ID");
 const GID_DEFAULT: gid_t = 1000;
 
 pub const FILE_MASK: u32 = 0o440;
-pub const DIR_MASK: u32 = 0o550;
+pub const DIR_MASK: u32 = 0o750;
 
 pub fn get_path_prefix() -> &'static str {
     PATH_PREFIX.unwrap_or(PATH_PREFIX_DEFAULT)
