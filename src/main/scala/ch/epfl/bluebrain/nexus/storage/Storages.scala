@@ -4,7 +4,9 @@ import java.nio.file.StandardCopyOption._
 import java.nio.file.{Files, Path, Paths}
 import java.security.MessageDigest
 
-import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.HttpCharsets.`UTF-8`
+import akka.http.scaladsl.model.MediaTypes.{`application/octet-stream`, `application/x-tar`}
+import akka.http.scaladsl.model.{ContentType, MediaType, MediaTypes, Uri}
 import akka.stream.Materializer
 import akka.stream.alpakka.file.scaladsl.Directory
 import akka.stream.scaladsl.{FileIO, Keep, Sink}
@@ -20,6 +22,7 @@ import ch.epfl.bluebrain.nexus.storage.config.AppConfig.{DigestConfig, StorageCo
 import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
 import ch.epfl.bluebrain.nexus.storage.digest.DigestComputation.sink
 import com.github.ghik.silencer.silent
+import org.apache.commons.io.FilenameUtils
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.sys.process._
@@ -156,7 +159,7 @@ object Storages {
                 case (digFuture, ioFuture) =>
                   digFuture.zipWith(ioFuture) {
                     case (digest, io) if io.wasSuccessful && absFilePath.toFile.exists() =>
-                      Future(FileAttributes(s"file://$absFilePath", io.count, digest))
+                      Future(FileAttributes(s"file://$absFilePath", io.count, digest, detectMediaType(absFilePath)))
                     case _ =>
                       Future.failed(InternalError(s"I/O error writing file to path '$relativeFilePath'"))
                   }
@@ -166,6 +169,16 @@ object Storages {
               .to[F]
           } else
         F.raiseError(PathInvalid(name, relativeFilePath))
+    }
+
+    private def detectMediaType(path: Path): ContentType = {
+      lazy val fromExtension = Try(MediaTypes.forExtension(FilenameUtils.getExtension(path.toFile.getName)))
+        .getOrElse(`application/octet-stream`)
+      val mediaType: MediaType = Try(Files.probeContentType(path)) match {
+        case Success(value) if value != null && value.nonEmpty => MediaType.parse(value).getOrElse(fromExtension)
+        case _                                                 => fromExtension
+      }
+      ContentType(mediaType, () => `UTF-8`)
     }
 
     def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
@@ -189,13 +202,14 @@ object Storages {
           F.unit
         }
 
-      def computeSizeAndMove(): F[RejOrAttributes] =
+      def computeSizeAndMove(isDir: Boolean): F[RejOrAttributes] =
         size(absSourcePath).flatMap { computedSize =>
+          lazy val contentType: ContentType = if (isDir) `application/x-tar` else detectMediaType(absDestPath)
           fixPermissions(absSourcePath) >>
             F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
             F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
             F.pure(cache.asyncComputePut(absDestPath, digestConfig.algorithm)) >>
-            F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize, Digest.empty)))
+            F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize, Digest.empty, contentType)))
         }
 
       def dirContainsLink(path: Path): F[Boolean] =
@@ -217,11 +231,11 @@ object Storages {
       else if (Files.isSymbolicLink(absSourcePath) || containsHardLink(absSourcePath))
         F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
       else if (Files.isRegularFile(absSourcePath))
-        computeSizeAndMove()
+        computeSizeAndMove(isDir = false)
       else if (Files.isDirectory(absSourcePath))
         dirContainsLink(absSourcePath).flatMap {
           case true  => F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
-          case false => computeSizeAndMove()
+          case false => computeSizeAndMove(isDir = true)
         } else F.pure(Left(PathNotFound(name, sourceRelativePath)))
     }
 
