@@ -165,7 +165,7 @@ class StorageClientSpec
           other == null || (other.copy(entity = req.entity) == req &&
           removeDelimiters(consume(other.entity.dataBytes)) == removeDelimiters(consume(req.entity.dataBytes)))
         }
-        val fileAttr = FileAttributes(s"file:///root/one/two", 12L, digest)
+        val fileAttr = FileAttributes(s"file:///root/one/two", 12L, digest, `application/octet-stream`)
         attributesClient(matches(createFile(name, path, source, "two"))) shouldReturn
           IO.pure(fileAttr)
         client.createFile(name, path, source).ioValue shouldEqual fileAttr
@@ -218,7 +218,7 @@ class StorageClientSpec
 
       "return the file attributes" in new Ctx {
         val sourcePath = Uri.Path("two/three")
-        val fileAttr   = FileAttributes(s"file:///root/one/two/$filename", 12L, Digest.empty)
+        val fileAttr   = FileAttributes(s"file:///root/one/two/$filename", 12L, Digest.empty, `application/octet-stream`)
         attributesClient(moveFile(name, sourcePath, path)) shouldReturn IO.pure(fileAttr)
         client.moveFile(name, sourcePath, path).ioValue shouldEqual fileAttr
       }

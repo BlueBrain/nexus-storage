@@ -24,6 +24,8 @@ import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
 import org.apache.commons.io.FileUtils
 import org.mockito.IdiomaticMockito
 import org.scalatest._
+import akka.http.scaladsl.model.ContentTypes._
+import akka.http.scaladsl.model.MediaTypes.`application/x-tar`
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -46,7 +48,7 @@ class DiskStorageSpec
   implicit val mt: Materializer     = ActorMaterializer()
 
   val rootPath = Files.createTempDirectory("storage-test")
-  val sConfig  = StorageConfig(rootPath, Paths.get("nexus"), true, List("/bin/echo"))
+  val sConfig  = StorageConfig(rootPath, Paths.get("nexus"), fixerEnabled = true, List("/bin/echo"))
   val dConfig  = DigestConfig("SHA-256", 1L, 1, 1, 1 second)
   val cache    = mock[DigestCache[IO]]
   val storage  = new DiskStorage[IO](sConfig, dConfig, cache)
@@ -142,7 +144,7 @@ class DiskStorageSpec
         val digest                    = Digest("SHA-256", "290f493c44f5d63d06b374d0a5abd292fae38b92cab2fae5efefe1b0e9347f56")
         implicit val pathDoesNotExist = PathDoesNotExist
         storage.createFile(name, relativeFilePath, source).ioValue shouldEqual
-          FileAttributes(s"file://${absoluteFilePath.toString}", 12L, digest)
+          FileAttributes(s"file://${absoluteFilePath.toString}", 12L, digest, `text/plain(UTF-8)`)
       }
     }
 
@@ -214,7 +216,7 @@ class DiskStorageSpec
         Files.write(absoluteFile, content.getBytes(StandardCharsets.UTF_8))
 
         storage.moveFile(name, Uri.Path(file), Uri.Path("some/other.txt")).accepted shouldEqual
-          FileAttributes(s"file://${basePath.resolve("some/other.txt")}", 12L, Digest.empty)
+          FileAttributes(s"file://${basePath.resolve("some/other.txt")}", 12L, Digest.empty, `text/plain(UTF-8)`)
         Files.exists(absoluteFile) shouldEqual false
         Files.exists(basePath.resolve("some/other.txt")) shouldEqual true
       }
@@ -230,7 +232,7 @@ class DiskStorageSpec
 
         val result      = storage.moveFile(name, Uri.Path(dir), Uri.Path("some/other")).accepted
         val resolvedDir = basePath.resolve("some/other")
-        result shouldEqual FileAttributes(s"file://$resolvedDir", 12L, Digest.empty)
+        result shouldEqual FileAttributes(s"file://$resolvedDir", 12L, Digest.empty, `application/x-tar`)
         Files.exists(absoluteDir) shouldEqual false
         Files.exists(absoluteFile) shouldEqual false
         Files.exists(resolvedDir) shouldEqual true

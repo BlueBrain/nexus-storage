@@ -30,9 +30,16 @@ object File {
     * @param location  the file location
     * @param bytes     the size of the file file in bytes
     * @param digest    the digest information of the file
+    * @param mediaType the media type of the file
     */
-  final case class FileAttributes(location: Uri, bytes: Long, digest: Digest)
+  final case class FileAttributes(location: Uri, bytes: Long, digest: Digest, mediaType: ContentType)
   object FileAttributes {
+    private implicit val encMediaType: Encoder[ContentType] =
+      Encoder.encodeString.contramap(_.value)
+
+    private implicit val decMediaType: Decoder[ContentType] =
+      Decoder.decodeString.emap(ContentType.parse(_).left.map(_.mkString("\n")))
+
     implicit val fileAttrEncoder: Encoder[FileAttributes] =
       deriveEncoder[FileAttributes].mapJson(_.addContext(resourceCtxUri))
     implicit val fileAttrDecoder: Decoder[FileAttributes] = deriveDecoder[FileAttributes]
