@@ -171,15 +171,18 @@ object Storages {
         F.raiseError(PathInvalid(name, relativeFilePath))
     }
 
-    private def detectMediaType(path: Path): ContentType = {
-      lazy val fromExtension = Try(MediaTypes.forExtension(FilenameUtils.getExtension(path.toFile.getName)))
-        .getOrElse(`application/octet-stream`)
-      val mediaType: MediaType = Try(Files.probeContentType(path)) match {
-        case Success(value) if value != null && value.nonEmpty => MediaType.parse(value).getOrElse(fromExtension)
-        case _                                                 => fromExtension
+    private def detectMediaType(path: Path, isDir: Boolean = false): ContentType =
+      if (isDir)
+        `application/x-tar`
+      else {
+        lazy val fromExtension = Try(MediaTypes.forExtension(FilenameUtils.getExtension(path.toFile.getName)))
+          .getOrElse(`application/octet-stream`)
+        val mediaType: MediaType = Try(Files.probeContentType(path)) match {
+          case Success(value) if value != null && value.nonEmpty => MediaType.parse(value).getOrElse(fromExtension)
+          case _                                                 => fromExtension
+        }
+        ContentType(mediaType, () => `UTF-8`)
       }
-      ContentType(mediaType, () => `UTF-8`)
-    }
 
     def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
         implicit bucketEv: BucketExists
@@ -202,15 +205,16 @@ object Storages {
           F.unit
         }
 
-      def computeSizeAndMove(isDir: Boolean): F[RejOrAttributes] =
+      def computeSizeAndMove(isDir: Boolean): F[RejOrAttributes] = {
+        lazy val mediaType = detectMediaType(absDestPath, isDir)
         size(absSourcePath).flatMap { computedSize =>
-          lazy val contentType: ContentType = if (isDir) `application/x-tar` else detectMediaType(absDestPath)
           fixPermissions(absSourcePath) >>
             F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
             F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
             F.pure(cache.asyncComputePut(absDestPath, digestConfig.algorithm)) >>
-            F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize, Digest.empty, contentType)))
+            F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize, Digest.empty, mediaType)))
         }
+      }
 
       def dirContainsLink(path: Path): F[Boolean] =
         Directory
