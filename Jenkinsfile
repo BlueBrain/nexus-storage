@@ -4,9 +4,6 @@ Boolean isPR = env.CHANGE_ID != null
 
 pipeline {
     agent { label 'slave-sbt' }
-    tools {
-        jdk 'jdk11'
-    }
     options {
         timeout(time: 30, unit: 'MINUTES') 
     }

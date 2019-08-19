@@ -64,9 +64,10 @@ lazy val storage = project
   .enablePlugins(BuildInfoPlugin, ServicePackagingPlugin)
   .aggregate(client)
   .settings(
-    name                  := "storage",
-    moduleName            := "storage",
-    coverageFailOnMinimum := true,
+    name                     := "storage",
+    moduleName               := "storage",
+    coverageFailOnMinimum    := true,
+    javaSpecificationVersion := "1.8",
     libraryDependencies ++= Seq(
       apacheCompress,
       akkaHttp,
@@ -106,9 +107,10 @@ lazy val client = project
   .disablePlugins(AssemblyPlugin)
   .settings(
     testSettings,
-    name                  := "storage-client",
-    moduleName            := "storage-client",
-    coverageFailOnMinimum := true,
+    name                     := "storage-client",
+    moduleName               := "storage-client",
+    coverageFailOnMinimum    := true,
+    javaSpecificationVersion := "1.8",
     libraryDependencies ++= Seq(
       akkaHttp,
       akkaStream,
