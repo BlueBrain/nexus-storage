@@ -57,12 +57,14 @@ class StorageClientSpec
   private val token  = OAuth2BearerToken("token")
 
   private implicit val attributesClient: HttpClient[IO, FileAttributes]   = mock[HttpClient[IO, FileAttributes]]
+  private implicit val digestClient: HttpClient[IO, Digest]               = mock[HttpClient[IO, Digest]]
   private implicit val sourceClient: HttpClient[IO, AkkaSource]           = mock[HttpClient[IO, AkkaSource]]
   private implicit val servDescClient: HttpClient[IO, ServiceDescription] = mock[HttpClient[IO, ServiceDescription]]
   private implicit val notUsed: HttpClient[IO, NotUsed]                   = mock[HttpClient[IO, NotUsed]]
   private implicit val tokenOpt: Option[AuthToken]                        = Option(AuthToken("token"))
 
-  private val client = new StorageClient[IO](config, attributesClient, sourceClient, servDescClient, notUsed)
+  private val client =
+    new StorageClient[IO](config, attributesClient, digestClient, sourceClient, servDescClient, notUsed)
 
   private def exists(name: String) =
     Head(s"https://nexus.example.com/v1/buckets/$name").addCredentials(token)
@@ -78,6 +80,9 @@ class StorageClientSpec
 
   private def getFile(name: String, path: Uri.Path) =
     Get(s"https://nexus.example.com/v1/buckets/$name/files/$path").addCredentials(token)
+
+  private def getDigest(name: String, path: Uri.Path) =
+    Get(s"https://nexus.example.com/v1/buckets/$name/digests/$path").addCredentials(token)
 
   private def moveFile(name: String, source: Uri.Path, dest: Uri.Path) = {
     val json = Json.obj("source" -> Json.fromString(source.toString()))
@@ -112,6 +117,7 @@ class StorageClientSpec
     val content  = genString()
     val filename = genString()
     val source   = sourceInChunks(content)
+    val digest   = Digest("SHA-256", genString())
   }
 
   "The StorageClient" when {
@@ -159,8 +165,7 @@ class StorageClientSpec
           other == null || (other.copy(entity = req.entity) == req &&
           removeDelimiters(consume(other.entity.dataBytes)) == removeDelimiters(consume(req.entity.dataBytes)))
         }
-        val fileAttr =
-          FileAttributes(s"file:///root/one/two", 12L, Digest("SHA-256", genString()))
+        val fileAttr = FileAttributes(s"file:///root/one/two", 12L, digest, `application/octet-stream`)
         attributesClient(matches(createFile(name, path, source, "two"))) shouldReturn
           IO.pure(fileAttr)
         client.createFile(name, path, source).ioValue shouldEqual fileAttr
@@ -194,12 +199,26 @@ class StorageClientSpec
       }
     }
 
+    "getting a file digest" should {
+
+      "return the digest" in new Ctx {
+        digestClient(getDigest(name, path)) shouldReturn IO.pure(digest)
+        client.getDigest(name, path).ioValue shouldEqual digest
+      }
+
+      "propagate the underlying exception" in new Ctx {
+        forAll(exs) { ex =>
+          digestClient(getDigest(name, path)) shouldReturn IO.raiseError(ex)
+          client.getDigest(name, path).failed[Exception] shouldEqual ex
+        }
+      }
+    }
+
     "moving a file" should {
 
       "return the file attributes" in new Ctx {
         val sourcePath = Uri.Path("two/three")
-        val fileAttr =
-          FileAttributes(s"file:///root/one/two/$filename", 12L, Digest("SHA-256", genString()))
+        val fileAttr   = FileAttributes(s"file:///root/one/two/$filename", 12L, Digest.empty, `application/octet-stream`)
         attributesClient(moveFile(name, sourcePath, path)) shouldReturn IO.pure(fileAttr)
         client.moveFile(name, sourcePath, path).ioValue shouldEqual fileAttr
       }

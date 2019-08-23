@@ -2,10 +2,10 @@ package ch.epfl.bluebrain.nexus.storage.routes
 
 import akka.http.scaladsl.model.MediaTypes._
 import akka.http.scaladsl.model.StatusCodes._
-import akka.http.scaladsl.model.headers.RawHeader
-import akka.http.scaladsl.model.{ContentType, HttpEntity, Uri}
+import akka.http.scaladsl.model.{HttpEntity, StatusCode, Uri}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import ch.epfl.bluebrain.nexus.storage.File.Digest
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.HttpConfig
 import ch.epfl.bluebrain.nexus.storage.routes.StorageDirectives._
@@ -19,7 +19,7 @@ import kamon.instrumentation.akka.http.TracingDirectives.operationName
 import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
 
-class StorageRoutes()(implicit storages: Storages[AkkaSource], hc: HttpConfig) {
+class StorageRoutes()(implicit storages: Storages[Task, AkkaSource], hc: HttpConfig) {
 
   def routes: Route =
     // Consume buckets/{name}/
@@ -44,7 +44,7 @@ class StorageRoutes()(implicit storages: Storages[AkkaSource], hc: HttpConfig) {
                       // Upload file
                       fileUpload("file") {
                         case (_, source) =>
-                          complete(Created -> storages.createFile[Task](name, relativePath, source).runToFuture)
+                          complete(Created -> storages.createFile(name, relativePath, source).runToFuture)
                       }
                     }
                   },
@@ -53,7 +53,7 @@ class StorageRoutes()(implicit storages: Storages[AkkaSource], hc: HttpConfig) {
                     entity(as[LinkFile]) {
                       case LinkFile(source) =>
                         validatePath(name, source) {
-                          complete(storages.moveFile[Task](name, source, relativePath).runWithStatus(OK))
+                          complete(storages.moveFile(name, source, relativePath).runWithStatus(OK))
                         }
                     }
                   },
@@ -61,23 +61,34 @@ class StorageRoutes()(implicit storages: Storages[AkkaSource], hc: HttpConfig) {
                   get {
                     pathExists(name, relativePath).apply { implicit pathExistsEvidence =>
                       storages.getFile(name, relativePath) match {
-                        case Right((source, Some(filename))) =>
-                          sourceEntity(source, `application/octet-stream`, filename)
-                        case Right((source, None)) => sourceEntity(source, `application/gnutar`, s"dir-$name.tgz")
-                        case Left(err)             => complete(err)
+                        case Right((source, Some(_))) => complete(HttpEntity(`application/octet-stream`, source))
+                        case Right((source, None))    => complete(HttpEntity(`application/x-tar`, source))
+                        case Left(err)                => complete(err)
                       }
                     }
                   }
                 )
             }
           }
+        },
+        // Consume digests
+        (pathPrefix("digests") & extractRelativePath(name)) { relativePath =>
+          operationName(s"/${hc.prefix}/buckets/{}/digests/{}") {
+            bucketExists(name).apply { implicit bucketExistsEvidence =>
+              // Get file digest
+              get {
+                pathExists(name, relativePath).apply { implicit pathExistsEvidence =>
+                  val result = storages.getDigest(name, relativePath).map[(StatusCode, Digest)] {
+                    case Digest.empty => Accepted -> Digest.empty
+                    case digest       => OK       -> digest
+                  }
+                  complete(result.runToFuture)
+                }
+              }
+            }
+          }
         }
       )
-    }
-
-  private def sourceEntity(source: AkkaSource, contentType: ContentType, filename: String): Route =
-    (respondWithHeaders(RawHeader("Content-Disposition", s"attachment; filename*=UTF-8''$filename")) & encodeResponse) {
-      complete(HttpEntity(contentType, source))
     }
 }
 
@@ -96,6 +107,8 @@ object StorageRoutes {
     implicit val linkFileEnc: Encoder[LinkFile] = deriveEncoder[LinkFile]
   }
 
-  final def apply(storages: Storages[AkkaSource])(implicit cfg: AppConfig): StorageRoutes =
-    new StorageRoutes()(storages, cfg.http)
+  final def apply(storages: Storages[Task, AkkaSource])(implicit cfg: AppConfig): StorageRoutes = {
+    implicit val s = storages
+    new StorageRoutes()
+  }
 }

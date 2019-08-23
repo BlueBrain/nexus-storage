@@ -14,7 +14,6 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
-import cats.effect.Effect
 import ch.epfl.bluebrain.nexus.commons.test.{Randomness, Resources}
 import ch.epfl.bluebrain.nexus.iam.client.IamClient
 import ch.epfl.bluebrain.nexus.iam.client.types.Caller
@@ -48,10 +47,10 @@ class StorageRoutesSpec
 
   override implicit def patienceConfig: PatienceConfig = PatienceConfig(3 second, 15 milliseconds)
 
-  implicit val appConfig: AppConfig       = Settings(system).appConfig
-  implicit val iamClient: IamClient[Task] = mock[IamClient[Task]]
-  val storages: Storages[AkkaSource]      = mock[Storages[AkkaSource]]
-  val route: Route                        = Routes(storages)
+  implicit val appConfig: AppConfig        = Settings(system).appConfig
+  implicit val iamClient: IamClient[Task]  = mock[IamClient[Task]]
+  val storages: Storages[Task, AkkaSource] = mock[Storages[Task, AkkaSource]]
+  val route: Route                         = Routes(storages)
 
   iamClient.identities(None) shouldReturn Task(Caller(Anonymous, Set.empty))
 
@@ -87,8 +86,11 @@ class StorageRoutesSpec
           storages.exists(name) wasCalled once
           responseAs[Json] shouldEqual jsonContentOf(
             "/error.json",
-            Map(quote("{type}")   -> "BucketNotFound",
-                quote("{reason}") -> s"The provided bucket '$name' does not exist."))
+            Map(
+              quote("{type}")   -> "BucketNotFound",
+              quote("{reason}") -> s"The provided bucket '$name' does not exist."
+            )
+          )
         }
       }
 
@@ -141,9 +143,7 @@ class StorageRoutesSpec
       "fail when create file returns a exception" in new RandomFileCreate {
         storages.exists(name) shouldReturn BucketExists
         storages.pathExists(name, filePathUri) shouldReturn PathDoesNotExist
-        storages.createFile[Task](eqTo(name), eqTo(filePathUri), any[AkkaSource])(any[Effect[Task]],
-                                                                                  eqTo(BucketExists),
-                                                                                  eqTo(PathDoesNotExist)) shouldReturn
+        storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(eqTo(BucketExists), eqTo(PathDoesNotExist)) shouldReturn
           Task.raiseError(InternalError("something went wrong"))
 
         Put(s"/v1/buckets/$name/files/path/to/file/$filename", multipartForm) ~> route ~> check {
@@ -155,23 +155,22 @@ class StorageRoutesSpec
               quote("{reason}") -> s"The system experienced an unexpected error, please try again later."
             )
           )
-          storages.createFile[Task](eqTo(name), eqTo(filePathUri), any[AkkaSource])(
-            any[Effect[Task]],
+          storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(
             eqTo(BucketExists),
-            eqTo(PathDoesNotExist)) wasCalled once
+            eqTo(PathDoesNotExist)
+          ) wasCalled once
         }
       }
 
       "pass" in new RandomFileCreate {
         val absoluteFilePath = appConfig.storage.rootVolume.resolve(filePath)
         val digest           = Digest("SHA-256", genString())
-        val attributes       = FileAttributes(s"file://$absoluteFilePath", 12L, digest)
+        val attributes       = FileAttributes(s"file://$absoluteFilePath", 12L, digest, `application/octet-stream`)
         storages.exists(name) shouldReturn BucketExists
         storages.pathExists(name, filePathUri) shouldReturn PathDoesNotExist
-        storages.createFile[Task](eqTo(name), eqTo(filePathUri), any[AkkaSource])(
-          any[Effect[Task]],
-          eqTo(BucketExists),
-          eqTo(PathDoesNotExist)) shouldReturn Task(attributes)
+        storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(eqTo(BucketExists), eqTo(PathDoesNotExist)) shouldReturn Task(
+          attributes
+        )
 
         Put(s"/v1/buckets/$name/files/path/to/file/$filename", multipartForm) ~> route ~> check {
           status shouldEqual Created
@@ -179,15 +178,16 @@ class StorageRoutesSpec
             "/file-created.json",
             Map(
               quote("{location}")  -> attributes.location.toString,
+              quote("{mediaType}") -> attributes.mediaType.value,
               quote("{bytes}")     -> attributes.bytes.toString,
               quote("{algorithm}") -> attributes.digest.algorithm,
               quote("{value}")     -> attributes.digest.value
             )
           )
-          storages.createFile[Task](eqTo(name), eqTo(filePathUri), any[AkkaSource])(
-            any[Effect[Task]],
+          storages.createFile(eqTo(name), eqTo(filePathUri), any[AkkaSource])(
             eqTo(BucketExists),
-            eqTo(PathDoesNotExist)) wasCalled once
+            eqTo(PathDoesNotExist)
+          ) wasCalled once
         }
       }
     }
@@ -214,9 +214,7 @@ class StorageRoutesSpec
         storages.exists(name) shouldReturn BucketExists
         val source = "source/dir"
         val dest   = "dest/dir"
-        storages.moveFile[Task](eqTo(name), eqTo(Uri.Path(source)), eqTo(Uri.Path(dest)))(
-          any[Effect[Task]],
-          eqTo(BucketExists)) shouldReturn
+        storages.moveFile(name, Uri.Path(source), Uri.Path(dest))(BucketExists) shouldReturn
           Task.raiseError(InternalError("something went wrong"))
 
         val json = jsonContentOf("/file-link.json", Map(quote("{source}") -> source))
@@ -231,9 +229,7 @@ class StorageRoutesSpec
             )
           )
 
-          storages.moveFile[Task](eqTo(name), eqTo(Uri.Path(source)), eqTo(Uri.Path(dest)))(
-            any[Effect[Task]],
-            eqTo(BucketExists)) wasCalled once
+          storages.moveFile(name, Uri.Path(source), Uri.Path(dest))(BucketExists) wasCalled once
         }
       }
 
@@ -248,8 +244,10 @@ class StorageRoutesSpec
           status shouldEqual BadRequest
           responseAs[Json] shouldEqual jsonContentOf(
             "/error.json",
-            Map(quote("{type}")   -> "PathInvalid",
-                quote("{reason}") -> s"The provided location inside the bucket '$name' with the relative path '$source' is invalid.")
+            Map(
+              quote("{type}")   -> "PathInvalid",
+              quote("{reason}") -> s"The provided location inside the bucket '$name' with the relative path '$source' is invalid."
+            )
           )
         }
       }
@@ -258,10 +256,9 @@ class StorageRoutesSpec
         storages.exists(name) shouldReturn BucketExists
         val source     = "source/dir"
         val dest       = "dest/dir"
-        val attributes = FileAttributes(s"file://some/prefix/$dest", 12L, Digest("SHA-256", genString()))
-        storages.moveFile[Task](eqTo(name), eqTo(Uri.Path(source)), eqTo(Uri.Path(dest)))(
-          any[Effect[Task]],
-          eqTo(BucketExists)) shouldReturn Task.pure(Right(attributes))
+        val attributes = FileAttributes(s"file://some/prefix/$dest", 12L, Digest.empty, `application/octet-stream`)
+        storages.moveFile(name, Uri.Path(source), Uri.Path(dest))(BucketExists) shouldReturn
+          Task.pure(Right(attributes))
 
         val json = jsonContentOf("/file-link.json", Map(quote("{source}") -> source))
 
@@ -271,15 +268,14 @@ class StorageRoutesSpec
             "/file-created.json",
             Map(
               quote("{location}")  -> attributes.location.toString,
+              quote("{mediaType}") -> attributes.mediaType.value,
               quote("{bytes}")     -> attributes.bytes.toString,
-              quote("{algorithm}") -> attributes.digest.algorithm,
-              quote("{value}")     -> attributes.digest.value
+              quote("{algorithm}") -> "",
+              quote("{value}")     -> ""
             )
           )
 
-          storages.moveFile[Task](eqTo(name), eqTo(Uri.Path(source)), eqTo(Uri.Path(dest)))(
-            any[Effect[Task]],
-            eqTo(BucketExists)) wasCalled once
+          storages.moveFile(name, Uri.Path(source), Uri.Path(dest))(BucketExists) wasCalled once
         }
       }
     }
@@ -332,7 +328,6 @@ class StorageRoutesSpec
         Get(s"/v1/buckets/$name/files/$filename") ~> Accept(`*/*`) ~> route ~> check {
           status shouldEqual OK
           contentType.value shouldEqual "application/octet-stream"
-          header("Content-Disposition").value.value() shouldEqual s"""attachment; filename*=UTF-8''$filename"""
           responseEntity.dataBytes.runFold("")(_ ++ _.utf8String).futureValue shouldEqual content
           storages.getFile(name, filePathUri) wasCalled once
         }
@@ -347,11 +342,60 @@ class StorageRoutesSpec
 
         Get(s"/v1/buckets/$name/files/$directory") ~> Accept(`*/*`) ~> route ~> check {
           status shouldEqual OK
-          contentType.value shouldEqual "application/gnutar"
-          header("Content-Disposition").value.value() shouldEqual
-            s"""attachment; filename*=UTF-8''dir-$name.tgz"""
+          contentType.value shouldEqual "application/x-tar"
           responseEntity.dataBytes.runFold("")(_ ++ _.utf8String).futureValue shouldEqual content
           storages.getFile(name, directoryUri) wasCalled once
+        }
+      }
+    }
+
+    "fetching the file digest" should {
+
+      "fail when the path does not exists" in new RandomFile {
+        val filePathUri = Uri.Path(s"$filename")
+        storages.exists(name) shouldReturn BucketExists
+        storages.pathExists(name, filePathUri) shouldReturn PathDoesNotExist
+
+        Get(s"/v1/buckets/$name/digests/$filename") ~> Accept(`*/*`) ~> route ~> check {
+          status shouldEqual NotFound
+          responseAs[Json] shouldEqual jsonContentOf(
+            "/error.json",
+            Map(
+              quote("{type}")   -> "PathNotFound",
+              quote("{reason}") -> s"The provided location inside the bucket '$name' with the relative path '$filePathUri' does not exist."
+            )
+          )
+          storages.pathExists(name, filePathUri) wasCalled once
+        }
+      }
+
+      "return digest" in new RandomFile {
+        val filePathUri = Uri.Path(s"$filename")
+        storages.exists(name) shouldReturn BucketExists
+        val digest = Digest("SHA-256", genString())
+        storages.getDigest(name, filePathUri) shouldReturn Task(digest)
+        storages.pathExists(name, filePathUri) shouldReturn PathExists
+
+        Get(s"/v1/buckets/$name/digests/$filename") ~> Accept(`*/*`) ~> route ~> check {
+          status shouldEqual OK
+          responseAs[Json] shouldEqual Json.obj(
+            "_algorithm" -> Json.fromString(digest.algorithm),
+            "_value"     -> Json.fromString(digest.value)
+          )
+          storages.getDigest(name, filePathUri) wasCalled once
+        }
+      }
+
+      "return empty digest" in new RandomFile {
+        val filePathUri = Uri.Path(s"$filename")
+        storages.exists(name) shouldReturn BucketExists
+        storages.getDigest(name, filePathUri) shouldReturn Task(Digest.empty)
+        storages.pathExists(name, filePathUri) shouldReturn PathExists
+
+        Get(s"/v1/buckets/$name/digests/$filename") ~> Accept(`*/*`) ~> route ~> check {
+          status shouldEqual Accepted
+          responseAs[Json] shouldEqual Json.obj("_algorithm" -> Json.fromString(""), "_value" -> Json.fromString(""))
+          storages.getDigest(name, filePathUri) wasCalled once
         }
       }
     }

@@ -26,7 +26,7 @@ class AppInfoRoutesSpec
 
     implicit val config: AppConfig          = Settings(system).appConfig
     implicit val iamClient: IamClient[Task] = mock[IamClient[Task]]
-    val route: Route                        = Routes(mock[Storages[AkkaSource]])
+    val route: Route                        = Routes(mock[Storages[Task, AkkaSource]])
 
     "return application information" in {
       Get("/") ~> route ~> check {

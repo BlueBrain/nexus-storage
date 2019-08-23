@@ -23,6 +23,7 @@ import ch.epfl.bluebrain.nexus.iam.client.types._
 import ch.epfl.bluebrain.nexus.storage.client.StorageClient._
 import ch.epfl.bluebrain.nexus.storage.client.StorageClientError._
 import ch.epfl.bluebrain.nexus.storage.client.config.StorageClientConfig
+import ch.epfl.bluebrain.nexus.storage.client.types.FileAttributes.Digest
 import ch.epfl.bluebrain.nexus.storage.client.types.{FileAttributes, LinkFile, ServiceDescription}
 import io.circe
 import io.circe.parser.parse
@@ -31,16 +32,16 @@ import journal.Logger
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 class StorageClient[F[_]] private[client] (
     config: StorageClientConfig,
     attributes: HttpClient[F, FileAttributes],
+    digest: HttpClient[F, Digest],
     source: HttpClient[F, AkkaSource],
     serviceDesc: HttpClient[F, ServiceDescription],
     emptyBody: HttpClient[F, NotUsed]
 )(implicit F: Effect[F], ec: ExecutionContext) {
-
-  private val emptyChunk = "An HttpEntity.Chunk must have non-empty data"
 
   def serviceDescription: F[ServiceDescription] =
     serviceDesc(Get(config.iri.toAkkaUri))
@@ -66,15 +67,15 @@ class StorageClient[F[_]] private[client] (
     * @return The file attributes wrapped on the effect type F[] containing the metadata plus the file bytes, digest and location
     */
   def createFile(name: String, relativePath: Uri.Path, source: AkkaSource)(
-      implicit cred: Option[AuthToken]): F[FileAttributes] = {
+      implicit cred: Option[AuthToken]
+  ): F[FileAttributes] = {
     val endpoint       = config.files(name) + slashIfNone(relativePath).toIriPath
     val bodyPartEntity = HttpEntity.IndefiniteLength(ContentTypes.`application/octet-stream`, source)
     val filename       = extractName(relativePath).getOrElse("myfile")
     val multipartForm  = FormData(BodyPart("file", bodyPartEntity, Map("filename" -> filename))).toEntity()
     attributes(Put(endpoint.toAkkaUri, multipartForm).withCredentials).recoverWith {
-      case ex: IllegalArgumentException if ex.getMessage != null && ex.getMessage.endsWith(emptyChunk) =>
-        createFile(name, relativePath, Source.empty)
-      case ex => F.raiseError(ex)
+      case EmptyChunk => createFile(name, relativePath, Source.empty)
+      case ex         => F.raiseError(ex)
     }
   }
 
@@ -97,6 +98,17 @@ class StorageClient[F[_]] private[client] (
   }
 
   /**
+    * Retrieves the file digest.
+    *
+    * @param name         the storage bucket name
+    * @param relativePath the relative path to the file location
+    */
+  def getDigest(name: String, relativePath: Uri.Path)(implicit cred: Option[AuthToken]): F[Digest] = {
+    val endpoint = config.digests(name) + slashIfNone(relativePath).toIriPath
+    digest(Get(endpoint.toAkkaUri).withCredentials)
+  }
+
+  /**
     * Moves a path from the provided ''sourceRelativePath'' to ''destRelativePath'' inside the nexus folder.
     *
     * @param name               the storage bucket name
@@ -105,7 +117,8 @@ class StorageClient[F[_]] private[client] (
     * @return The file attributes wrapped on the effect type F[] containing the metadata plus the file bytes, digest and location
     */
   def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
-      implicit cred: Option[AuthToken]): F[FileAttributes] = {
+      implicit cred: Option[AuthToken]
+  ): F[FileAttributes] = {
     val endpoint = (config.files(name) + slashIfNone(destRelativePath).toIriPath).toAkkaUri
     attributes(Put(endpoint, LinkFile(sourceRelativePath)).withCredentials)
   }
@@ -149,7 +162,8 @@ object StorageClient {
       cl: UntypedHttpClient[F],
       um: FromEntityUnmarshaller[A]
   ): HttpClient[F, A] = new HttpClient[F, A] {
-    private val logger = Logger(s"IamHttpClient[${implicitly[ClassTag[A]]}]")
+    private val logger     = Logger(s"IamHttpClient[${implicitly[ClassTag[A]]}]")
+    private val emptyChunk = "An HttpEntity.Chunk must have non-empty data"
 
     private def typeAndReason(string: String): Either[circe.Error, (String, String)] =
       parse(string).flatMap { json =>
@@ -158,8 +172,16 @@ object StorageClient {
         }
       }
 
+    private def handleError[B](req: HttpRequest): Throwable => F[B] = {
+      case NonFatal(ex: IllegalArgumentException) if ex.getMessage != null && ex.getMessage.endsWith(emptyChunk) =>
+        F.raiseError(EmptyChunk)
+      case NonFatal(th) =>
+        logger.error(s"Unexpected response for Storage call. Request: '${req.method} ${req.uri}'", th)
+        F.raiseError(UnknownError(StatusCodes.InternalServerError, th.getMessage))
+    }
+
     override def apply(req: HttpRequest): F[A] =
-      cl.apply(req).flatMap { resp =>
+      cl(req).handleErrorWith(handleError(req)).flatMap { resp =>
         resp.status match {
           case StatusCodes.Unauthorized =>
             cl.toString(resp.entity).flatMap { entityAsString =>
@@ -179,12 +201,12 @@ object StorageClient {
             val value = L.liftIO(IO.fromFuture(IO(um(resp.entity))))
             value.recoverWith {
               case pf: ParsingFailure =>
-                logger.error(
-                  s"Failed to parse a successful response of '${req.method.name()} ${req.getUri().toString}'.")
+                logger
+                  .error(s"Failed to parse a successful response of '${req.method.name()} ${req.getUri().toString}'.")
                 F.raiseError[A](UnmarshallingError(pf.getMessage()))
               case df: DecodingFailure =>
-                logger.error(
-                  s"Failed to decode a successful response of '${req.method.name()} ${req.getUri().toString}'.")
+                logger
+                  .error(s"Failed to decode a successful response of '${req.method.name()} ${req.getUri().toString}'.")
                 F.raiseError(UnmarshallingError(df.getMessage()))
             }
 
@@ -197,7 +219,8 @@ object StorageClient {
                 case "PathAlreadyExists" => F.raiseError(InvalidPath(msg))
                 case _ =>
                   logger.error(
-                    s"Received '${other.value}' when accessing '${req.method.name()} ${req.uri.toString()}', response entity as string: '$msg'")
+                    s"Received '${other.value}' when accessing '${req.method.name()} ${req.uri.toString()}', response entity as string: '$msg'"
+                  )
                   F.raiseError[A](UnknownError(other, msg))
 
               }
@@ -222,11 +245,14 @@ object StorageClient {
     implicit val mt: ActorMaterializer     = ActorMaterializer()
     implicit val ec: ExecutionContext      = as.dispatcher
     implicit val ucl: UntypedHttpClient[F] = HttpClient.untyped[F]
-    new StorageClient(config,
-                      httpClient[F, FileAttributes],
-                      httpClient[F, AkkaSource],
-                      httpClient[F, ServiceDescription],
-                      httpClient[F, NotUsed])
+    new StorageClient(
+      config,
+      httpClient[F, FileAttributes],
+      httpClient[F, Digest],
+      httpClient[F, AkkaSource],
+      httpClient[F, ServiceDescription],
+      httpClient[F, NotUsed]
+    )
   }
 }
 // $COVERAGE-ON$

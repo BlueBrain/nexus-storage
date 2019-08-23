@@ -1,30 +1,34 @@
 package ch.epfl.bluebrain.nexus.storage
 
+import java.nio.file.StandardCopyOption._
 import java.nio.file.{Files, Path, Paths}
 import java.security.MessageDigest
 
-import akka.http.scaladsl.model.Uri
+import akka.http.scaladsl.model.HttpCharsets.`UTF-8`
+import akka.http.scaladsl.model.MediaTypes.{`application/octet-stream`, `application/x-tar`}
+import akka.http.scaladsl.model.{ContentType, MediaType, MediaTypes, Uri}
 import akka.stream.Materializer
 import akka.stream.alpakka.file.scaladsl.Directory
-import akka.stream.scaladsl.Compression.gzip
 import akka.stream.scaladsl.{FileIO, Keep, Sink}
-import akka.util.ByteString
 import cats.effect.Effect
 import cats.implicits._
 import ch.epfl.bluebrain.nexus.storage.File._
 import ch.epfl.bluebrain.nexus.storage.Rejection.{PathAlreadyExists, PathContainsLinks, PathNotFound}
-import ch.epfl.bluebrain.nexus.storage.StorageError.{InternalError, PathInvalid}
-import ch.epfl.bluebrain.nexus.storage.Storages.PathExistence._
+import ch.epfl.bluebrain.nexus.storage.StorageError.{InternalError, PathInvalid, PermissionsFixingFailed}
 import ch.epfl.bluebrain.nexus.storage.Storages.BucketExistence._
+import ch.epfl.bluebrain.nexus.storage.Storages.PathExistence._
 import ch.epfl.bluebrain.nexus.storage.Storages.{BucketExistence, PathExistence}
-import ch.epfl.bluebrain.nexus.storage.config.AppConfig.StorageConfig
+import ch.epfl.bluebrain.nexus.storage.config.AppConfig.{DigestConfig, StorageConfig}
+import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
+import ch.epfl.bluebrain.nexus.storage.digest.DigestComputation.sink
 import com.github.ghik.silencer.silent
-import java.nio.file.StandardCopyOption._
+import org.apache.commons.io.FilenameUtils
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.sys.process._
 import scala.util.{Success, Try}
 
-trait Storages[Source] {
+trait Storages[F[_], Source] {
 
   /**
     * Checks that the provided bucket name exists and it is readable/writable.
@@ -46,13 +50,13 @@ trait Storages[Source] {
     *
     * @param name         the storage bucket name
     * @param relativePath the relative path location
-    * @param source   the file content
-    * @return Left(rejection) or Right(fileAttributes).
-    *         The file attributes contains the metadata plus the file bytes, digest and location
+    * @param source       the file content
+    * @return The file attributes containing the metadata (bytes and location) wrapped in an F effect type
     */
-  def createFile[F[_]: Effect](name: String, relativePath: Uri.Path, source: Source)(
+  def createFile(name: String, relativePath: Uri.Path, source: Source)(
       implicit @silent bucketEv: BucketExists,
-      @silent pathEv: PathDoesNotExist): F[FileAttributes]
+      @silent pathEv: PathDoesNotExist
+  ): F[FileAttributes]
 
   /**
     * Moves a path from the provided ''sourceRelativePath'' to ''destRelativePath'' inside the nexus folder.
@@ -61,10 +65,11 @@ trait Storages[Source] {
     * @param sourceRelativePath the source relative path location
     * @param destRelativePath   the destination relative path location inside the nexus folder
     * @return Left(rejection) or Right(fileAttributes).
-    *         The file attributes contains the metadata plus the file bytes, digest and location
+    *         The file attributes contain the metadata (bytes and location) wrapped in an F effect type
     */
-  def moveFile[F[_]: Effect](name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
-      implicit @silent bucketEv: BucketExists): F[RejOrAttributes]
+  def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
+      implicit @silent bucketEv: BucketExists
+  ): F[RejOrAttributes]
 
   /**
     * Retrieves the file as a Source.
@@ -73,8 +78,21 @@ trait Storages[Source] {
     * @param relativePath the relative path to the file location
     * @return Left(rejection),  Right(source, Some(filename)) when the path is a file and Right(source, None) when the path is a directory
     */
-  def getFile(name: String, relativePath: Uri.Path)(implicit @silent bucketEv: BucketExists,
-                                                    @silent pathEv: PathExists): RejOr[(Source, Option[String])]
+  def getFile(name: String, relativePath: Uri.Path)(
+      implicit @silent bucketEv: BucketExists,
+      @silent pathEv: PathExists
+  ): RejOr[(Source, Option[String])]
+
+  /**
+    * Retrieves the digest of the file.
+    *
+    * @param name         the storage bucket name
+    * @param relativePath the relative path to the file location
+    */
+  def getDigest(name: String, relativePath: Uri.Path)(
+      implicit @silent bucketEv: BucketExists,
+      @silent pathEv: PathExists
+  ): F[Digest]
 
 }
 
@@ -100,8 +118,11 @@ object Storages {
   /**
     * An Disk implementation of Storage interface.
     */
-  final class DiskStorage(config: StorageConfig)(implicit ec: ExecutionContext, mt: Materializer)
-      extends Storages[AkkaSource] {
+  final class DiskStorage[F[_]](config: StorageConfig, digestConfig: DigestConfig, cache: DigestCache[F])(
+      implicit ec: ExecutionContext,
+      mt: Materializer,
+      F: Effect[F]
+  ) extends Storages[F, AkkaSource] {
 
     private def basePath(name: String, protectedDir: Boolean = true): Path = {
       val path = config.rootVolume.resolve(name).normalize()
@@ -124,54 +145,76 @@ object Storages {
       else PathDoesNotExist
     }
 
-    def createFile[F[_]](name: String, relativeFilePath: Uri.Path, source: AkkaSource)(
-        implicit F: Effect[F],
-        @silent bucketEv: BucketExists,
-        @silent pathEv: PathDoesNotExist): F[FileAttributes] = {
+    def createFile(name: String, relativeFilePath: Uri.Path, source: AkkaSource)(
+        implicit @silent bucketEv: BucketExists,
+        @silent pathEv: PathDoesNotExist
+    ): F[FileAttributes] = {
       val absFilePath = filePath(name, relativeFilePath)
       if (absFilePath.descendantOf(basePath(name)))
         F.fromTry(Try(Files.createDirectories(absFilePath.getParent))) >>
-          source
-            .alsoToMat(digestSink(config.algorithm))(Keep.right)
-            .toMat(FileIO.toPath(absFilePath)) {
-              case (digFuture, ioFuture) =>
-                digFuture.zipWith(ioFuture) {
-                  case (digest, io) if io.wasSuccessful && absFilePath.toFile.exists() =>
-                    Future(FileAttributes(s"file://$absFilePath", io.count, digest))
-                  case _ =>
-                    Future.failed(InternalError(s"I/O error writing file to path '$relativeFilePath'"))
-                }
-            }
-            .run()
-            .flatten
-            .to[F]
-      else
+          F.fromTry(Try(MessageDigest.getInstance(digestConfig.algorithm))).flatMap { msgDigest =>
+            source
+              .alsoToMat(sink(msgDigest))(Keep.right)
+              .toMat(FileIO.toPath(absFilePath)) {
+                case (digFuture, ioFuture) =>
+                  digFuture.zipWith(ioFuture) {
+                    case (digest, io) if io.wasSuccessful && absFilePath.toFile.exists() =>
+                      Future(FileAttributes(s"file://$absFilePath", io.count, digest, detectMediaType(absFilePath)))
+                    case _ =>
+                      Future.failed(InternalError(s"I/O error writing file to path '$relativeFilePath'"))
+                  }
+              }
+              .run()
+              .flatten
+              .to[F]
+          } else
         F.raiseError(PathInvalid(name, relativeFilePath))
     }
 
-    def moveFile[F[_]](name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
-        implicit F: Effect[F],
-        bucketEv: BucketExists): F[RejOrAttributes] = {
+    private def detectMediaType(path: Path, isDir: Boolean = false): ContentType =
+      if (isDir)
+        `application/x-tar`
+      else {
+        lazy val fromExtension = Try(MediaTypes.forExtension(FilenameUtils.getExtension(path.toFile.getName)))
+          .getOrElse(`application/octet-stream`)
+        val mediaType: MediaType = Try(Files.probeContentType(path)) match {
+          case Success(value) if value != null && value.nonEmpty => MediaType.parse(value).getOrElse(fromExtension)
+          case _                                                 => fromExtension
+        }
+        ContentType(mediaType, () => `UTF-8`)
+      }
+
+    def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
+        implicit bucketEv: BucketExists
+    ): F[RejOrAttributes] = {
 
       val bucketPath          = basePath(name, protectedDir = false)
       val bucketProtectedPath = basePath(name)
       val absSourcePath       = filePath(name, sourceRelativePath, protectedDir = false)
       val absDestPath         = filePath(name, destRelativePath)
 
-      def computeMetadata(source: AkkaSource): F[RejOrAttributes] =
-        source
-          .toMat(digestSink(config.algorithm))(Keep.right)
-          .run()
-          .map[RejOrAttributes] { digest =>
-            Right(FileAttributes(s"file://$absDestPath", Files.size(absDestPath), digest))
-          }
-          .to[F]
+      def fixPermissions(path: Path): F[Unit] =
+        if (config.fixerEnabled) {
+          val absPath  = path.toAbsolutePath.normalize.toString
+          val process  = Process(config.fixerCommand :+ absPath)
+          val logger   = StringProcessLogger(config.fixerCommand, absPath)
+          val exitCode = process ! logger
+          if (exitCode == 0) F.unit
+          else F.raiseError(PermissionsFixingFailed(absPath, logger.toString))
+        } else {
+          F.unit
+        }
 
-      //TODO: When the resource that we want to move is being used by some process, a copy will be issue instead: https://stackoverflow.com/questions/34733765/java-nio-file-files-move-is-copying-instead-of-moving
-      def moveAndComputeMeta(sourceF: Path => AkkaSource): F[RejOrAttributes] =
-        F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
-          F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
-          computeMetadata(sourceF(absDestPath))
+      def computeSizeAndMove(isDir: Boolean): F[RejOrAttributes] = {
+        lazy val mediaType = detectMediaType(absDestPath, isDir)
+        size(absSourcePath).flatMap { computedSize =>
+          fixPermissions(absSourcePath) >>
+            F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
+            F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
+            F.pure(cache.asyncComputePut(absDestPath, digestConfig.algorithm)) >>
+            F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize, Digest.empty, mediaType)))
+        }
+      }
 
       def dirContainsLink(path: Path): F[Boolean] =
         Directory
@@ -192,25 +235,29 @@ object Storages {
       else if (Files.isSymbolicLink(absSourcePath) || containsHardLink(absSourcePath))
         F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
       else if (Files.isRegularFile(absSourcePath))
-        moveAndComputeMeta(getFile)
+        computeSizeAndMove(isDir = false)
       else if (Files.isDirectory(absSourcePath))
         dirContainsLink(absSourcePath).flatMap {
           case true  => F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
-          case false => moveAndComputeMeta(getDirectory)
+          case false => computeSizeAndMove(isDir = true)
         } else F.pure(Left(PathNotFound(name, sourceRelativePath)))
     }
 
-    def getFile(name: String, relativePath: Uri.Path)(
-        implicit @silent bucketEv: BucketExists,
-        @silent pathEv: PathExists): RejOr[(AkkaSource, Option[String])] = {
+    def getFile(
+        name: String,
+        relativePath: Uri.Path
+    )(implicit @silent bucketEv: BucketExists, @silent pathEv: PathExists): RejOr[(AkkaSource, Option[String])] = {
       val absPath = filePath(name, relativePath)
-      if (Files.isRegularFile(absPath)) Right(getFile(absPath) -> Some(absPath.getFileName.toString))
-      else if (Files.isDirectory(absPath)) Right(getDirectory(absPath) -> None)
+      if (Files.isRegularFile(absPath)) Right(fileSource(absPath) -> Some(absPath.getFileName.toString))
+      else if (Files.isDirectory(absPath)) Right(folderSource(absPath) -> None)
       else Left(PathNotFound(name, relativePath))
     }
 
-    private def getDirectory(absPath: Path): AkkaSource = Directory.walk(absPath).via(TarFlow.writer(absPath)).via(gzip)
-    private def getFile(absPath: Path): AkkaSource      = FileIO.fromPath(absPath)
+    def getDigest(
+        name: String,
+        relativePath: Uri.Path
+    )(implicit bucketEv: BucketExists, pathEv: PathExists): F[Digest] =
+      cache.get(filePath(name, relativePath))
 
     private def containsHardLink(absPath: Path): Boolean =
       if (Files.isDirectory(absPath)) false
@@ -220,12 +267,13 @@ object Storages {
           case _              => false
         }
 
-    private def digestSink(algorithm: String): Sink[ByteString, Future[Digest]] =
-      Sink
-        .fold(MessageDigest.getInstance(algorithm))((digest, currentBytes: ByteString) => {
-          digest.update(currentBytes.asByteBuffer)
-          digest
-        })
-        .mapMaterializedValue(_.map(dig => Digest(dig.getAlgorithm, dig.digest().map("%02x".format(_)).mkString)))
+    private def size(absPath: Path): F[Long] =
+      if (Files.isDirectory(absPath))
+        Directory.walk(absPath).filter(Files.isRegularFile(_)).runFold(0L)(_ + Files.size(_)).to[F]
+      else if (Files.isRegularFile(absPath))
+        F.pure(Files.size(absPath))
+      else
+        F.raiseError(InternalError(s"Path '$absPath' is not a file nor a directory"))
   }
+
 }

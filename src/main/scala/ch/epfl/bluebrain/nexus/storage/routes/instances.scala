@@ -28,7 +28,8 @@ object instances extends LowPriority {
     * @return marshaller for any `A` value
     */
   implicit final def eitherValueMarshaller[A: Encoder](
-      implicit printer: Printer = defaultPrinter): ToResponseMarshaller[Either[Rejection, (StatusCode, A)]] =
+      implicit printer: Printer = defaultPrinter
+  ): ToResponseMarshaller[Either[Rejection, (StatusCode, A)]] =
     eitherMarshaller(valueWithStatusCodeFromMarshaller[Rejection], valueWithStatusCodeMarshaller[A])
 
   /**
@@ -39,7 +40,8 @@ object instances extends LowPriority {
   implicit final def valueWithStatusCodeFromMarshaller[A: Encoder](
       implicit statusFrom: StatusFrom[A],
       printer: Printer = defaultPrinter,
-      ordered: OrderedKeys = orderedKeys): ToResponseMarshaller[A] =
+      ordered: OrderedKeys = orderedKeys
+  ): ToResponseMarshaller[A] =
     jsonLdWithStatusCodeMarshaller.compose { value =>
       statusFrom(value) -> value.asJson
     }
@@ -65,32 +67,41 @@ trait LowPriority extends FailFastCirceSupport {
     */
   final implicit def jsonLdWithStatusCodeMarshaller(
       implicit printer: Printer = defaultPrinter,
-      keys: OrderedKeys = orderedKeys): ToResponseMarshaller[(StatusCode, Json)] =
-    onOf(contentType =>
-      Marshaller.withFixedContentType[(StatusCode, Json), HttpResponse](contentType) {
-        case (status, json) =>
-          HttpResponse(status = status, entity = HttpEntity(`application/ld+json`, printer.pretty(json.sortKeys)))
-    })
+      keys: OrderedKeys = orderedKeys
+  ): ToResponseMarshaller[(StatusCode, Json)] =
+    onOf(
+      contentType =>
+        Marshaller.withFixedContentType[(StatusCode, Json), HttpResponse](contentType) {
+          case (status, json) =>
+            HttpResponse(status = status, entity = HttpEntity(`application/ld+json`, printer.pretty(json.sortKeys)))
+        }
+    )
 
   /**
     * `Json` => HTTP entity
     *
     * @return marshaller for JSON-LD value
     */
-  final implicit def jsonLdEntityMarshaller(implicit printer: Printer = defaultPrinter,
-                                            keys: OrderedKeys = orderedKeys): ToEntityMarshaller[Json] =
-    onOf(contentType =>
-      Marshaller.withFixedContentType[Json, MessageEntity](contentType) { json =>
-        HttpEntity(`application/ld+json`, printer.pretty(json.sortKeys))
-    })
+  final implicit def jsonLdEntityMarshaller(
+      implicit printer: Printer = defaultPrinter,
+      keys: OrderedKeys = orderedKeys
+  ): ToEntityMarshaller[Json] =
+    onOf(
+      contentType =>
+        Marshaller.withFixedContentType[Json, MessageEntity](contentType) { json =>
+          HttpEntity(`application/ld+json`, printer.pretty(json.sortKeys))
+        }
+    )
 
   /**
     * `A` => HTTP entity
     *
     * @return marshaller for JSON-LD value
     */
-  final implicit def valueEntityMarshaller[A: Encoder](implicit printer: Printer = defaultPrinter,
-                                                       keys: OrderedKeys = orderedKeys): ToEntityMarshaller[A] =
+  final implicit def valueEntityMarshaller[A: Encoder](
+      implicit printer: Printer = defaultPrinter,
+      keys: OrderedKeys = orderedKeys
+  ): ToEntityMarshaller[A] =
     jsonLdEntityMarshaller.compose(_.asJson)
 
   /**
@@ -101,11 +112,13 @@ trait LowPriority extends FailFastCirceSupport {
     */
   implicit final def valueWithStatusCodeMarshaller[A: Encoder](
       implicit printer: Printer = defaultPrinter,
-      keys: OrderedKeys = orderedKeys): ToResponseMarshaller[(StatusCode, A)] =
+      keys: OrderedKeys = orderedKeys
+  ): ToResponseMarshaller[(StatusCode, A)] =
     jsonLdWithStatusCodeMarshaller.compose { case (status, value) => status -> value.asJson }
 
   private[routes] def onOf[A, Response](
-      fMarshaller: MediaType.WithFixedCharset => Marshaller[A, Response]): Marshaller[A, Response] = {
+      fMarshaller: MediaType.WithFixedCharset => Marshaller[A, Response]
+  ): Marshaller[A, Response] = {
     val marshallers = Seq(`application/ld+json`, `application/json`).map(fMarshaller)
     Marshaller.oneOf(marshallers: _*)
   }

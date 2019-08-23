@@ -25,16 +25,16 @@ scalafmt: {
  */
 
 // Dependency versions
-val akkaVersion           = "2.5.23"
+val akkaVersion           = "2.5.25"
 val akkaHttpVersion       = "10.1.9"
 val apacheCompressVersion = "1.18"
-val alpakkaVersion        = "1.0.2"
+val alpakkaVersion        = "1.1.1"
 val catsVersion           = "1.6.1"
-val catsEffectVersion     = "1.3.1"
+val catsEffectVersion     = "1.4.0"
 val circeVersion          = "0.11.1"
-val commonsVersion        = "0.17.0"
-val iamVersion            = "1.1.1"
-val mockitoVersion        = "1.5.11"
+val commonsVersion        = "0.17.6"
+val iamVersion            = "310fb2cd"
+val mockitoVersion        = "1.5.14"
 val monixVersion          = "3.0.0-RC3"
 val pureconfigVersion     = "0.11.1"
 val scalaTestVersion      = "3.0.8"
@@ -60,13 +60,14 @@ lazy val scalaTest       = "org.scalatest"           %% "scalatest"             
 
 lazy val storage = project
   .in(file("."))
-  .settings(testSettings, buildInfoSettings)
+  .settings(assemblySettings, testSettings, buildInfoSettings)
   .enablePlugins(BuildInfoPlugin, ServicePackagingPlugin)
   .aggregate(client)
   .settings(
-    name                  := "storage",
-    moduleName            := "storage",
-    coverageFailOnMinimum := true,
+    name                     := "storage",
+    moduleName               := "storage",
+    coverageFailOnMinimum    := true,
+    javaSpecificationVersion := "1.8",
     libraryDependencies ++= Seq(
       apacheCompress,
       akkaHttp,
@@ -86,8 +87,12 @@ lazy val storage = project
       mockito         % Test,
       scalaTest       % Test
     ),
+    cleanFiles ++= Seq(
+      baseDirectory.value / "permissions-fixer" / "target" / "**",
+      baseDirectory.value / "nexus-storage.jar"
+    ),
     mappings in Universal := {
-      val universalMappings = (mappings in Universal).value
+      val universalMappings = (mappings in Universal).value :+ cargo.value
       universalMappings.foldLeft(Vector.empty[(File, String)]) {
         case (acc, (file, filename)) if filename.contains("kanela-agent") =>
           acc :+ (file, "lib/instrumentation-agent.jar")
@@ -99,11 +104,13 @@ lazy val storage = project
 
 lazy val client = project
   .in(file("client"))
+  .disablePlugins(AssemblyPlugin)
   .settings(
     testSettings,
-    name                  := "storage-client",
-    moduleName            := "storage-client",
-    coverageFailOnMinimum := true,
+    name                     := "storage-client",
+    moduleName               := "storage-client",
+    coverageFailOnMinimum    := true,
+    javaSpecificationVersion := "1.8",
     libraryDependencies ++= Seq(
       akkaHttp,
       akkaStream,
@@ -114,9 +121,23 @@ lazy val client = project
       akkaHttpTestKit % Test,
       commonsTest     % Test,
       mockito         % Test,
-      scalaTest       % Test,
+      scalaTest       % Test
     )
   )
+
+lazy val assemblySettings = Seq(
+  test in assembly               := {},
+  assemblyOutputPath in assembly := baseDirectory.value / "nexus-storage.jar",
+  assemblyMergeStrategy in assembly := {
+    case PathList("org", "apache", "commons", "logging", xs @ _*)        => MergeStrategy.last
+    case PathList("akka", "remote", "kamon", xs @ _*)                    => MergeStrategy.last
+    case PathList("kamon", "instrumentation", "akka", "remote", xs @ _*) => MergeStrategy.last
+    case "META-INF/versions/9/module-info.class"                         => MergeStrategy.discard
+    case x =>
+      val oldStrategy = (assemblyMergeStrategy in assembly).value
+      oldStrategy(x)
+  }
+)
 
 lazy val testSettings = Seq(
   Test / testOptions       += Tests.Argument(TestFrameworks.ScalaTest, "-o", "-u", "target/test-reports"),
@@ -127,6 +148,22 @@ lazy val buildInfoSettings = Seq(
   buildInfoKeys    := Seq[BuildInfoKey](version),
   buildInfoPackage := "ch.epfl.bluebrain.nexus.storage.config"
 )
+
+lazy val cargo = taskKey[(File, String)]("Run Cargo to build 'nexus-fixer'")
+
+cargo := {
+  import scala.sys.process._
+
+  val log = streams.value.log
+  val cmd = Process(Seq("cargo", "build", "--release"), baseDirectory.value / "permissions-fixer")
+  if ((cmd !) == 0) {
+    log.success("Cargo build successful.")
+    (baseDirectory.value / "permissions-fixer" / "target" / "release" / "nexus-fixer") -> "bin/nexus-fixer"
+  } else {
+    log.error("Cargo build failed.")
+    throw new RuntimeException
+  }
+}
 
 inThisBuild(
   List(
