@@ -63,8 +63,10 @@ class TarFlowSpec
       val bytes      = new ByteArrayInputStream(byteString.toArray)
       val tar        = new TarArchiveInputStream(bytes)
 
-      @tailrec def readEntries(tar: TarArchiveInputStream,
-                               entries: List[PathAndContent] = Nil): List[PathAndContent] = {
+      @tailrec def readEntries(
+          tar: TarArchiveInputStream,
+          entries: List[PathAndContent] = Nil
+      ): List[PathAndContent] = {
         val entry = tar.getNextTarEntry
         if (entry == null) entries
         else {

@@ -11,7 +11,6 @@ native
 # Maven / SBT / Ant target #
 target/
 .bloop
-project/.bloop
 
 # IDE
 .settings
@@ -21,6 +20,9 @@ project/.bloop
 **/logs/
 **/nbactions.xml
 
+# Rust
+**/*.rs.bk
+Cargo.lock
 
 # Packages #
 ############

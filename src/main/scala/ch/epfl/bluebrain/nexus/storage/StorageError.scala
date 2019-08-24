@@ -54,7 +54,8 @@ object StorageError {
     */
   final case class PathNotFound(name: String, path: Path)
       extends StorageError(
-        s"The provided location inside the bucket '$name' with the relative path '$path' does not exist.")
+        s"The provided location inside the bucket '$name' with the relative path '$path' does not exist."
+      )
 
   /**
     * Signals an attempt to interact with a path that is invalid.
@@ -64,7 +65,17 @@ object StorageError {
     */
   final case class PathInvalid(name: String, path: Path)
       extends StorageError(
-        s"The provided location inside the bucket '$name' with the relative path '$path' is invalid.")
+        s"The provided location inside the bucket '$name' with the relative path '$path' is invalid."
+      )
+
+  /**
+    * Signals that the system call to the 'nexus-fixer' binary failed.
+    *
+    * @param path    the absolute path to the file
+    * @param message the error message returned by the system call
+    */
+  final case class PermissionsFixingFailed(path: String, message: String)
+      extends StorageError(s"Fixing permissions on the path '$path' failed with an error: $message")
 
   /**
     * Signals an internal timeout.
@@ -73,11 +84,12 @@ object StorageError {
     */
   final case class OperationTimedOut(override val msg: String) extends StorageError(msg)
 
-  implicit val storageErrorEncoder: Encoder[StorageError] = {
-    implicit val config: Configuration = Configuration.default.withDiscriminator("@type")
-    val enc                            = deriveEncoder[StorageError].mapJson(jsonError)
-    Encoder.instance(r => enc(r) deepMerge Json.obj("reason" -> Json.fromString(r.msg)))
-  }
+  private implicit val config: Configuration = Configuration.default.withDiscriminator("@type")
+
+  private val derivedEncoder = deriveEncoder[StorageError].mapJson(jsonError)
+
+  implicit val storageErrorEncoder: Encoder[StorageError] =
+    Encoder.instance(r => derivedEncoder(r) deepMerge Json.obj("reason" -> Json.fromString(r.msg)))
 
   implicit val storageErrorStatusFrom: StatusFrom[StorageError] = {
     case _: PathNotFound      => StatusCodes.NotFound

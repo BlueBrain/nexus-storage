@@ -4,11 +4,19 @@
 
 # Nexus Storage Service
 
-A service that is intended to abstract I/O file system operations with an API to deal with uploads and downloads of files.
-
+A service to abstract I/O operations on a remote file system, to support Nexus' file management API.
 
 Please visit the [parent project](https://github.com/BlueBrain/nexus) for more information about Nexus.
 
+## Build
+
+In the project's top-level directory run:
+
+```shell script
+./sbt assembly
+```
+
+This outputs a self-contained JAR `nexus-storage.jar`.
 
 ## Getting involved
  There are several channels provided to address different issues:
