@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.model.{HttpEntity, StatusCode, Uri}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import ch.epfl.bluebrain.nexus.storage.File.Digest
+import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.HttpConfig
 import ch.epfl.bluebrain.nexus.storage.routes.StorageDirectives._
@@ -71,16 +71,16 @@ class StorageRoutes()(implicit storages: Storages[Task, AkkaSource], hc: HttpCon
             }
           }
         },
-        // Consume digests
-        (pathPrefix("digests") & extractRelativePath(name)) { relativePath =>
-          operationName(s"/${hc.prefix}/buckets/{}/digests/{}") {
+        // Consume attributes
+        (pathPrefix("attributes") & extractRelativePath(name)) { relativePath =>
+          operationName(s"/${hc.prefix}/buckets/{}/attributes/{}") {
             bucketExists(name).apply { implicit bucketExistsEvidence =>
-              // Get file digest
+              // Get file attributes
               get {
                 pathExists(name, relativePath).apply { implicit pathExistsEvidence =>
-                  val result = storages.getDigest(name, relativePath).map[(StatusCode, Digest)] {
-                    case Digest.empty => Accepted -> Digest.empty
-                    case digest       => OK       -> digest
+                  val result = storages.getAttributes(name, relativePath).map[(StatusCode, FileAttributes)] {
+                    case attr @ FileAttributes(_, _, Digest.empty, _) => Accepted -> attr
+                    case attr                                         => OK       -> attr
                   }
                   complete(result.runToFuture)
                 }

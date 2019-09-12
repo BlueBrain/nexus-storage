@@ -12,7 +12,7 @@ import akka.util.Timeout
 import cats.effect.Effect
 import ch.epfl.bluebrain.nexus.iam.client.IamClient
 import ch.epfl.bluebrain.nexus.storage.Storages.DiskStorage
-import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
+import ch.epfl.bluebrain.nexus.storage.attributes.AttributesCache
 import ch.epfl.bluebrain.nexus.storage.config.{AppConfig, Settings}
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig._
 import ch.epfl.bluebrain.nexus.storage.routes.Routes
@@ -66,7 +66,7 @@ object Main {
     implicit val clock                      = Clock.systemUTC
 
     val storages: Storages[Task, AkkaSource] =
-      new DiskStorage(appConfig.storage, appConfig.digest, DigestCache[Task, AkkaSource])
+      new DiskStorage(appConfig.storage, appConfig.digest, AttributesCache[Task, AkkaSource])
 
     val logger: LoggingAdapter = Logging(as, getClass)
 
