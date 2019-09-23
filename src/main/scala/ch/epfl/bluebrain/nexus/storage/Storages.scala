@@ -4,9 +4,7 @@ import java.nio.file.StandardCopyOption._
 import java.nio.file.{Files, Path, Paths}
 import java.security.MessageDigest
 
-import akka.http.scaladsl.model.HttpCharsets.`UTF-8`
-import akka.http.scaladsl.model.MediaTypes.{`application/octet-stream`, `application/x-tar`}
-import akka.http.scaladsl.model.{ContentType, MediaType, MediaTypes, Uri}
+import akka.http.scaladsl.model.Uri
 import akka.stream.Materializer
 import akka.stream.alpakka.file.scaladsl.Directory
 import akka.stream.scaladsl.{FileIO, Keep, Sink}
@@ -18,11 +16,10 @@ import ch.epfl.bluebrain.nexus.storage.StorageError.{InternalError, PathInvalid,
 import ch.epfl.bluebrain.nexus.storage.Storages.BucketExistence._
 import ch.epfl.bluebrain.nexus.storage.Storages.PathExistence._
 import ch.epfl.bluebrain.nexus.storage.Storages.{BucketExistence, PathExistence}
+import ch.epfl.bluebrain.nexus.storage.attributes.AttributesCache
+import ch.epfl.bluebrain.nexus.storage.attributes.AttributesComputation._
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.{DigestConfig, StorageConfig}
-import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
-import ch.epfl.bluebrain.nexus.storage.digest.DigestComputation.sink
 import com.github.ghik.silencer.silent
-import org.apache.commons.io.FilenameUtils
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.sys.process._
@@ -84,15 +81,15 @@ trait Storages[F[_], Source] {
   ): RejOr[(Source, Option[String])]
 
   /**
-    * Retrieves the digest of the file.
+    * Retrieves the attributes of the file.
     *
     * @param name         the storage bucket name
     * @param relativePath the relative path to the file location
     */
-  def getDigest(name: String, relativePath: Uri.Path)(
+  def getAttributes(name: String, relativePath: Uri.Path)(
       implicit @silent bucketEv: BucketExists,
       @silent pathEv: PathExists
-  ): F[Digest]
+  ): F[FileAttributes]
 
 }
 
@@ -118,7 +115,7 @@ object Storages {
   /**
     * An Disk implementation of Storage interface.
     */
-  final class DiskStorage[F[_]](config: StorageConfig, digestConfig: DigestConfig, cache: DigestCache[F])(
+  final class DiskStorage[F[_]](config: StorageConfig, digestConfig: DigestConfig, cache: AttributesCache[F])(
       implicit ec: ExecutionContext,
       mt: Materializer,
       F: Effect[F]
@@ -154,7 +151,7 @@ object Storages {
         F.fromTry(Try(Files.createDirectories(absFilePath.getParent))) >>
           F.fromTry(Try(MessageDigest.getInstance(digestConfig.algorithm))).flatMap { msgDigest =>
             source
-              .alsoToMat(sink(msgDigest))(Keep.right)
+              .alsoToMat(sinkDigest(msgDigest))(Keep.right)
               .toMat(FileIO.toPath(absFilePath)) {
                 case (digFuture, ioFuture) =>
                   digFuture.zipWith(ioFuture) {
@@ -170,19 +167,6 @@ object Storages {
           } else
         F.raiseError(PathInvalid(name, relativeFilePath))
     }
-
-    private def detectMediaType(path: Path, isDir: Boolean = false): ContentType =
-      if (isDir)
-        `application/x-tar`
-      else {
-        lazy val fromExtension = Try(MediaTypes.forExtension(FilenameUtils.getExtension(path.toFile.getName)))
-          .getOrElse(`application/octet-stream`)
-        val mediaType: MediaType = Try(Files.probeContentType(path)) match {
-          case Success(value) if value != null && value.nonEmpty => MediaType.parse(value).getOrElse(fromExtension)
-          case _                                                 => fromExtension
-        }
-        ContentType(mediaType, () => `UTF-8`)
-      }
 
     def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
         implicit bucketEv: BucketExists
@@ -253,10 +237,10 @@ object Storages {
       else Left(PathNotFound(name, relativePath))
     }
 
-    def getDigest(
+    def getAttributes(
         name: String,
         relativePath: Uri.Path
-    )(implicit bucketEv: BucketExists, pathEv: PathExists): F[Digest] =
+    )(implicit bucketEv: BucketExists, pathEv: PathExists): F[FileAttributes] =
       cache.get(filePath(name, relativePath))
 
     private def containsHardLink(absPath: Path): Boolean =

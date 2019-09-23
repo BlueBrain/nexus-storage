@@ -20,7 +20,7 @@ import ch.epfl.bluebrain.nexus.storage.Storages.DiskStorage
 import ch.epfl.bluebrain.nexus.storage.Storages.PathExistence.{PathDoesNotExist, PathExists}
 import ch.epfl.bluebrain.nexus.storage.Storages.BucketExistence.{BucketDoesNotExist, BucketExists}
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.{DigestConfig, StorageConfig}
-import ch.epfl.bluebrain.nexus.storage.digest.DigestCache
+import ch.epfl.bluebrain.nexus.storage.attributes.AttributesCache
 import org.apache.commons.io.FileUtils
 import org.mockito.IdiomaticMockito
 import org.scalatest._
@@ -50,7 +50,7 @@ class DiskStorageSpec
   val rootPath = Files.createTempDirectory("storage-test")
   val sConfig  = StorageConfig(rootPath, Paths.get("nexus"), fixerEnabled = true, List("/bin/echo"))
   val dConfig  = DigestConfig("SHA-256", 1L, 1, 1, 1 second)
-  val cache    = mock[DigestCache[IO]]
+  val cache    = mock[AttributesCache[IO]]
   val storage  = new DiskStorage[IO](sConfig, dConfig, cache)
 
   override def afterAll(): Unit = {
@@ -266,7 +266,7 @@ class DiskStorageSpec
       }
     }
 
-    "fetching digest" should {
+    "fetching attributes" should {
 
       implicit val pathExistsEvidence = PathExists
 
@@ -275,12 +275,17 @@ class DiskStorageSpec
           PathNotFound(name, relativeFilePath)
       }
 
-      "return the digest" in new RelativeDirectoryCreated {
+      "return the attributes" in new RelativeDirectoryCreated {
         val content = "some content"
         Files.write(absoluteFilePath, content.getBytes(StandardCharsets.UTF_8))
-        val expectedDigest = Digest(alg, genString())
-        cache.get(absoluteFilePath) shouldReturn IO(expectedDigest)
-        storage.getDigest(name, relativeFilePath).ioValue shouldEqual expectedDigest
+        val expectedAttributes = FileAttributes(
+          s"file://$absoluteFilePath",
+          content.size.toLong,
+          Digest(alg, genString()),
+          `text/plain(UTF-8)`
+        )
+        cache.get(absoluteFilePath) shouldReturn IO(expectedAttributes)
+        storage.getAttributes(name, relativeFilePath).ioValue shouldEqual expectedAttributes
       }
     }
   }

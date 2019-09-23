@@ -24,7 +24,6 @@ import ch.epfl.bluebrain.nexus.iam.client.types._
 import ch.epfl.bluebrain.nexus.storage.client.StorageClient._
 import ch.epfl.bluebrain.nexus.storage.client.StorageClientError._
 import ch.epfl.bluebrain.nexus.storage.client.config.StorageClientConfig
-import ch.epfl.bluebrain.nexus.storage.client.types.FileAttributes.Digest
 import ch.epfl.bluebrain.nexus.storage.client.types.{FileAttributes, LinkFile, ServiceDescription}
 import io.circe
 import io.circe.parser.parse
@@ -38,7 +37,6 @@ import scala.util.control.NonFatal
 class StorageClient[F[_]] private[client] (
     config: StorageClientConfig,
     attributes: HttpClient[F, FileAttributes],
-    digest: HttpClient[F, Digest],
     source: HttpClient[F, AkkaSource],
     serviceDesc: HttpClient[F, ServiceDescription],
     emptyBody: HttpClient[F, NotUsed]
@@ -102,14 +100,14 @@ class StorageClient[F[_]] private[client] (
   }
 
   /**
-    * Retrieves the file digest.
+    * Retrieves the file attributes.
     *
     * @param name         the storage bucket name
     * @param relativePath the relative path to the file location
     */
-  def getDigest(name: String, relativePath: Uri.Path)(implicit cred: Option[AuthToken]): F[Digest] = {
-    val endpoint = config.digests(name) + slashIfNone(relativePath).toIriPath
-    digest(Get(endpoint.toAkkaUri).withCredentials)
+  def getAttributes(name: String, relativePath: Uri.Path)(implicit cred: Option[AuthToken]): F[FileAttributes] = {
+    val endpoint = config.attributes(name) + slashIfNone(relativePath).toIriPath
+    attributes(Get(endpoint.toAkkaUri).withCredentials)
   }
 
   /**
@@ -252,7 +250,6 @@ object StorageClient {
     new StorageClient(
       config,
       httpClient[F, FileAttributes],
-      httpClient[F, Digest],
       httpClient[F, AkkaSource],
       httpClient[F, ServiceDescription],
       httpClient[F, NotUsed]

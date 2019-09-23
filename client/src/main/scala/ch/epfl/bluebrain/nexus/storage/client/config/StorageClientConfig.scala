@@ -20,11 +20,11 @@ final case class StorageClientConfig(iri: AbsoluteIri, prefix: String) {
   def files(name: String): AbsoluteIri = buckets + name + "files"
 
   /**
-    * The digests endpoint: /buckets/{name}/digests
+    * The attributes endpoint: /buckets/{name}/attributes
     *
     * @param name the storage bucket name
     */
-  def digests(name: String): AbsoluteIri = buckets + name + "digests"
+  def attributes(name: String): AbsoluteIri = buckets + name + "attributes"
 
 }
 

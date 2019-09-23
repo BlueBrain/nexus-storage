@@ -57,14 +57,13 @@ class StorageClientSpec
   private val token  = OAuth2BearerToken("token")
 
   private implicit val attributesClient: HttpClient[IO, FileAttributes]   = mock[HttpClient[IO, FileAttributes]]
-  private implicit val digestClient: HttpClient[IO, Digest]               = mock[HttpClient[IO, Digest]]
   private implicit val sourceClient: HttpClient[IO, AkkaSource]           = mock[HttpClient[IO, AkkaSource]]
   private implicit val servDescClient: HttpClient[IO, ServiceDescription] = mock[HttpClient[IO, ServiceDescription]]
   private implicit val notUsed: HttpClient[IO, NotUsed]                   = mock[HttpClient[IO, NotUsed]]
   private implicit val tokenOpt: Option[AuthToken]                        = Option(AuthToken("token"))
 
   private val client =
-    new StorageClient[IO](config, attributesClient, digestClient, sourceClient, servDescClient, notUsed)
+    new StorageClient[IO](config, attributesClient, sourceClient, servDescClient, notUsed)
 
   private def exists(name: String) =
     Head(s"https://nexus.example.com/v1/buckets/$name").addCredentials(token)
@@ -81,8 +80,8 @@ class StorageClientSpec
   private def getFile(name: String, path: Uri.Path) =
     Get(s"https://nexus.example.com/v1/buckets/$name/files/$path").addCredentials(token)
 
-  private def getDigest(name: String, path: Uri.Path) =
-    Get(s"https://nexus.example.com/v1/buckets/$name/digests/$path").addCredentials(token)
+  private def getAttributes(name: String, path: Uri.Path) =
+    Get(s"https://nexus.example.com/v1/buckets/$name/attributes/$path").addCredentials(token)
 
   private def moveFile(name: String, source: Uri.Path, dest: Uri.Path) = {
     val json = Json.obj("source" -> Json.fromString(source.toString()))
@@ -202,17 +201,18 @@ class StorageClientSpec
       }
     }
 
-    "getting a file digest" should {
+    "getting file attributes" should {
 
-      "return the digest" in new Ctx {
-        digestClient(getDigest(name, path)) shouldReturn IO.pure(digest)
-        client.getDigest(name, path).ioValue shouldEqual digest
+      "succeed" in new Ctx {
+        val fileAttr = FileAttributes(s"file:///root/one/two", 12L, digest, `application/octet-stream`)
+        attributesClient(getAttributes(name, path)) shouldReturn IO.pure(fileAttr)
+        client.getAttributes(name, path).ioValue shouldEqual fileAttr
       }
 
       "propagate the underlying exception" in new Ctx {
         forAll(exs) { ex =>
-          digestClient(getDigest(name, path)) shouldReturn IO.raiseError(ex)
-          client.getDigest(name, path).failed[Exception] shouldEqual ex
+          attributesClient(getAttributes(name, path)) shouldReturn IO.raiseError(ex)
+          client.getAttributes(name, path).failed[Exception] shouldEqual ex
         }
       }
     }

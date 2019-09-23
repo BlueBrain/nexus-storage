@@ -5,6 +5,7 @@ import java.util.regex.Pattern.quote
 
 import akka.http.scaladsl.model.ContentTypes._
 import akka.http.scaladsl.model.MediaRanges._
+import akka.http.scaladsl.model.MediaTypes.{`application/octet-stream`, `image/jpeg`}
 import akka.http.scaladsl.model.Multipart.FormData
 import akka.http.scaladsl.model.Multipart.FormData.BodyPart
 import akka.http.scaladsl.model.StatusCodes._
@@ -18,6 +19,7 @@ import ch.epfl.bluebrain.nexus.commons.test.{Randomness, Resources}
 import ch.epfl.bluebrain.nexus.iam.client.IamClient
 import ch.epfl.bluebrain.nexus.iam.client.types.Caller
 import ch.epfl.bluebrain.nexus.iam.client.types.Identity.Anonymous
+import ch.epfl.bluebrain.nexus.rdf.Iri.AbsoluteIri
 import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
 import ch.epfl.bluebrain.nexus.storage.Rejection.PathNotFound
 import ch.epfl.bluebrain.nexus.storage.StorageError.InternalError
@@ -31,6 +33,7 @@ import monix.eval.Task
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{Matchers, OptionValues, WordSpecLike}
+import ch.epfl.bluebrain.nexus.rdf.syntax._
 
 import scala.concurrent.duration._
 
@@ -55,7 +58,8 @@ class StorageRoutesSpec
   iamClient.identities(None) shouldReturn Task(Caller(Anonymous, Set.empty))
 
   trait Ctx {
-    val name = genString()
+    val name                     = genString()
+    val resourceCtx: AbsoluteIri = url"https://bluebrain.github.io/nexus/contexts/resource.json".value
   }
 
   trait RandomFile extends Ctx {
@@ -349,14 +353,14 @@ class StorageRoutesSpec
       }
     }
 
-    "fetching the file digest" should {
+    "fetching the file attributes" should {
 
       "fail when the path does not exists" in new RandomFile {
         val filePathUri = Uri.Path(s"$filename")
         storages.exists(name) shouldReturn BucketExists
         storages.pathExists(name, filePathUri) shouldReturn PathDoesNotExist
 
-        Get(s"/v1/buckets/$name/digests/$filename") ~> Accept(`*/*`) ~> route ~> check {
+        Get(s"/v1/buckets/$name/attributes/$filename") ~> Accept(`*/*`) ~> route ~> check {
           status shouldEqual NotFound
           responseAs[Json] shouldEqual jsonContentOf(
             "/error.json",
@@ -369,33 +373,52 @@ class StorageRoutesSpec
         }
       }
 
-      "return digest" in new RandomFile {
+      "return attributes" in new RandomFile {
         val filePathUri = Uri.Path(s"$filename")
         storages.exists(name) shouldReturn BucketExists
-        val digest = Digest("SHA-256", genString())
-        storages.getDigest(name, filePathUri) shouldReturn Task(digest)
+        val attributes =
+          FileAttributes(s"file://$filePathUri", genInt().toLong, Digest("SHA-256", genString()), `image/jpeg`)
+        storages.getAttributes(name, filePathUri) shouldReturn Task(attributes)
         storages.pathExists(name, filePathUri) shouldReturn PathExists
 
-        Get(s"/v1/buckets/$name/digests/$filename") ~> Accept(`*/*`) ~> route ~> check {
+        Get(s"/v1/buckets/$name/attributes/$filename") ~> Accept(`*/*`) ~> route ~> check {
           status shouldEqual OK
-          responseAs[Json] shouldEqual Json.obj(
-            "_algorithm" -> Json.fromString(digest.algorithm),
-            "_value"     -> Json.fromString(digest.value)
+          val digestJson = Json.obj(
+            "_algorithm" -> Json.fromString(attributes.digest.algorithm),
+            "_value"     -> Json.fromString(attributes.digest.value)
           )
-          storages.getDigest(name, filePathUri) wasCalled once
+          responseAs[Json] shouldEqual Json
+            .obj(
+              "_bytes"     -> Json.fromLong(attributes.bytes),
+              "_digest"    -> digestJson,
+              "_location"  -> Json.fromString(attributes.location.toString()),
+              "_mediaType" -> Json.fromString(attributes.mediaType.toString)
+            )
+            .addContext(resourceCtx)
+          storages.getAttributes(name, filePathUri) wasCalled once
         }
       }
 
-      "return empty digest" in new RandomFile {
+      "return empty attributes" in new RandomFile {
         val filePathUri = Uri.Path(s"$filename")
         storages.exists(name) shouldReturn BucketExists
-        storages.getDigest(name, filePathUri) shouldReturn Task(Digest.empty)
+        storages.getAttributes(name, filePathUri) shouldReturn Task(
+          FileAttributes(s"file://$filePathUri", 0L, Digest.empty, `application/octet-stream`)
+        )
         storages.pathExists(name, filePathUri) shouldReturn PathExists
 
-        Get(s"/v1/buckets/$name/digests/$filename") ~> Accept(`*/*`) ~> route ~> check {
+        Get(s"/v1/buckets/$name/attributes/$filename") ~> Accept(`*/*`) ~> route ~> check {
           status shouldEqual Accepted
-          responseAs[Json] shouldEqual Json.obj("_algorithm" -> Json.fromString(""), "_value" -> Json.fromString(""))
-          storages.getDigest(name, filePathUri) wasCalled once
+          val digestJson = Json.obj("_algorithm" -> Json.fromString(""), "_value" -> Json.fromString(""))
+          responseAs[Json] shouldEqual Json
+            .obj(
+              "_bytes"     -> Json.fromLong(0L),
+              "_digest"    -> digestJson,
+              "_location"  -> Json.fromString(s"file://$filePathUri"),
+              "_mediaType" -> Json.fromString(`application/octet-stream`.toString())
+            )
+            .addContext(resourceCtx)
+          storages.getAttributes(name, filePathUri) wasCalled once
         }
       }
     }
