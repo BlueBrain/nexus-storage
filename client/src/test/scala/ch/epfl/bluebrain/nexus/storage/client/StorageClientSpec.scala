@@ -187,13 +187,16 @@ class StorageClientSpec
 
       "return the source" in new Ctx {
         sourceClient(getFile(name, path)) shouldReturn IO.pure(source)
-        client.getFile(name, path).ioValue shouldEqual source
+        consume(client.getFile(name, path).ioValue) shouldEqual content
       }
 
       "propagate the underlying exception" in new Ctx {
         forAll(exs) { ex =>
           sourceClient(getFile(name, path)) shouldReturn IO.raiseError(ex)
-          client.getFile(name, path).failed[Exception] shouldEqual ex
+          val thrown = the[Exception] thrownBy {
+            consume(client.getFile(name, path).ioValue)
+          }
+          thrown.getCause shouldEqual ex
         }
       }
     }

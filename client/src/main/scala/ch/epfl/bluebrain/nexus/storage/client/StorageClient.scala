@@ -14,6 +14,7 @@ import akka.stream.{ActorMaterializer, Materializer}
 import akka.util.ByteString
 import cats.effect.{Effect, IO, LiftIO}
 import cats.implicits._
+import cats.effect.implicits._
 import ch.epfl.bluebrain.nexus.commons.http.HttpClient
 import ch.epfl.bluebrain.nexus.commons.http.HttpClient._
 import ch.epfl.bluebrain.nexus.commons.http.JsonLdCirceSupport._
@@ -92,7 +93,10 @@ class StorageClient[F[_]] private[client] (
     */
   def getFile(name: String, relativePath: Uri.Path)(implicit cred: Option[AuthToken]): F[AkkaSource] = {
     val endpoint = config.files(name) + slashIfNone(relativePath).toIriPath
-    source(Get(endpoint.toAkkaUri).withCredentials)
+    val request  = Get(endpoint.toAkkaUri).withCredentials
+    F.pure {
+      Source.single(request).mapAsync(1)(source(_).toIO.unsafeToFuture()).flatMapConcat(identity)
+    }
   }
 
   /**
