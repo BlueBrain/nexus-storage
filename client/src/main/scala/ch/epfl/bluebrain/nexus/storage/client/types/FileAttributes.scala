@@ -33,7 +33,7 @@ object FileAttributes {
   private implicit val decMediaType: Decoder[ContentType] =
     Decoder.decodeString.emap(ContentType.parse(_).left.map(_.mkString("\n")))
 
-  implicit val fileAttrDecoder: Decoder[FileAttributes] = deriveDecoder[FileAttributes]
+  implicit val fileAttrDecoder: Decoder[FileAttributes] = deriveConfiguredDecoder[FileAttributes]
 
   /**
     * Digest related information of the file
@@ -46,7 +46,7 @@ object FileAttributes {
   object Digest {
     val empty: Digest = Digest("", "")
 
-    implicit val digestDecoder: Decoder[Digest] = deriveDecoder[Digest]
+    implicit val digestDecoder: Decoder[Digest] = deriveConfiguredDecoder[Digest]
   }
 }
 // $COVERAGE-ON$

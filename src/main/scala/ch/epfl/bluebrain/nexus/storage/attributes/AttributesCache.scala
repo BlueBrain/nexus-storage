@@ -6,7 +6,7 @@ import java.time.Clock
 import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.{ask, AskTimeoutException}
 import akka.util.Timeout
-import cats.effect.{Effect, IO}
+import cats.effect.{ContextShift, Effect, IO}
 import cats.implicits._
 import ch.epfl.bluebrain.nexus.storage.File.FileAttributes
 import ch.epfl.bluebrain.nexus.storage.StorageError.{InternalError, OperationTimedOut}
@@ -53,6 +53,7 @@ object AttributesCache {
       underlying: ActorRef
   )(implicit system: ActorSystem, tm: Timeout, F: Effect[F]): AttributesCache[F] =
     new AttributesCache[F] {
+      private implicit val contextShift: ContextShift[IO] = IO.contextShift(system.dispatcher)
 
       override def get(filePath: Path): F[FileAttributes] =
         IO.fromFuture(IO.shift(system.dispatcher) >> IO(underlying ? Get(filePath)))

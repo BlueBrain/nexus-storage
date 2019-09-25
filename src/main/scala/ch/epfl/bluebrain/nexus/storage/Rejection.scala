@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.Uri.Path
 import akka.http.scaladsl.server.{Rejection => AkkaRejection}
 import ch.epfl.bluebrain.nexus.commons.http.directives.StatusFrom
 import io.circe.generic.extras.Configuration
-import io.circe.generic.extras.semiauto.deriveEncoder
+import io.circe.generic.extras.semiauto.deriveConfiguredEncoder
 import io.circe.{Encoder, Json}
 
 /**
@@ -73,7 +73,7 @@ object Rejection {
 
   implicit val rejectionEncoder: Encoder[Rejection] = {
     implicit val rejectionConfig: Configuration = Configuration.default.withDiscriminator("@type")
-    val enc                                     = deriveEncoder[Rejection].mapJson(jsonError)
+    val enc                                     = deriveConfiguredEncoder[Rejection].mapJson(jsonError)
     Encoder.instance(r => enc(r) deepMerge Json.obj("reason" -> Json.fromString(r.msg)))
   }
 }

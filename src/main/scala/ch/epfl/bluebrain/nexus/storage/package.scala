@@ -14,7 +14,7 @@ import io.circe.syntax._
 import io.circe.{Decoder, Encoder, Json}
 
 import scala.annotation.tailrec
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 package object storage {
@@ -45,7 +45,10 @@ package object storage {
   implicit val decUri: Decoder[Uri]      = Decoder.decodeString.emapTry(s => Try(Uri(s)))
 
   implicit class FutureSyntax[A](private val future: Future[A]) extends AnyVal {
-    def to[F[_]](implicit F: LiftIO[F]): F[A] = F.liftIO(IO.fromFuture(IO(future)))
+    def to[F[_]](implicit F: LiftIO[F], ec: ExecutionContext): F[A] = {
+      implicit val contextShift = IO.contextShift(ec)
+      F.liftIO(IO.fromFuture(IO(future)))
+    }
   }
 
   implicit class PathSyntax(private val path: JavaPath) extends AnyVal {

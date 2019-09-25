@@ -164,8 +164,9 @@ object StorageClient {
       cl: UntypedHttpClient[F],
       um: FromEntityUnmarshaller[A]
   ): HttpClient[F, A] = new HttpClient[F, A] {
-    private val logger     = Logger(s"IamHttpClient[${implicitly[ClassTag[A]]}]")
-    private val emptyChunk = "An HttpEntity.Chunk must have non-empty data"
+    private val logger                = Logger(s"IamHttpClient[${implicitly[ClassTag[A]]}]")
+    private val emptyChunk            = "An HttpEntity.Chunk must have non-empty data"
+    private implicit val contextShift = IO.contextShift(ec)
 
     private def typeAndReason(string: String): Either[circe.Error, (String, String)] =
       parse(string).flatMap { json =>
