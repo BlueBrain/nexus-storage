@@ -41,8 +41,8 @@ object File {
       Decoder.decodeString.emap(ContentType.parse(_).left.map(_.mkString("\n")))
 
     implicit val fileAttrEncoder: Encoder[FileAttributes] =
-      deriveEncoder[FileAttributes].mapJson(_.addContext(resourceCtxUri))
-    implicit val fileAttrDecoder: Decoder[FileAttributes] = deriveDecoder[FileAttributes]
+      deriveConfiguredEncoder[FileAttributes].mapJson(_.addContext(resourceCtxUri))
+    implicit val fileAttrDecoder: Decoder[FileAttributes] = deriveConfiguredDecoder[FileAttributes]
   }
 
   /**
@@ -55,8 +55,8 @@ object File {
 
   object Digest {
     val empty: Digest                           = Digest("", "")
-    implicit val digestEncoder: Encoder[Digest] = deriveEncoder[Digest]
-    implicit val digestDecoder: Decoder[Digest] = deriveDecoder[Digest]
+    implicit val digestEncoder: Encoder[Digest] = deriveConfiguredEncoder[Digest]
+    implicit val digestDecoder: Decoder[Digest] = deriveConfiguredDecoder[Digest]
   }
 
 }

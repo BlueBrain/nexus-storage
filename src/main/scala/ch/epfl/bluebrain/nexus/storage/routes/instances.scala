@@ -73,7 +73,7 @@ trait LowPriority extends FailFastCirceSupport {
       contentType =>
         Marshaller.withFixedContentType[(StatusCode, Json), HttpResponse](contentType) {
           case (status, json) =>
-            HttpResponse(status = status, entity = HttpEntity(`application/ld+json`, printer.pretty(json.sortKeys)))
+            HttpResponse(status = status, entity = HttpEntity(`application/ld+json`, printer.print(json.sortKeys)))
         }
     )
 
@@ -89,7 +89,7 @@ trait LowPriority extends FailFastCirceSupport {
     onOf(
       contentType =>
         Marshaller.withFixedContentType[Json, MessageEntity](contentType) { json =>
-          HttpEntity(`application/ld+json`, printer.pretty(json.sortKeys))
+          HttpEntity(`application/ld+json`, printer.print(json.sortKeys))
         }
     )
 

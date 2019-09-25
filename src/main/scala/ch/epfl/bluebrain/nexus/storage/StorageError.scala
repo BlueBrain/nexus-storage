@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.Uri.Path
 import ch.epfl.bluebrain.nexus.commons.http.directives.StatusFrom
 import io.circe.generic.extras.Configuration
-import io.circe.generic.extras.semiauto.deriveEncoder
+import io.circe.generic.extras.semiauto.deriveConfiguredEncoder
 import io.circe.{Encoder, Json}
 
 /**
@@ -86,7 +86,7 @@ object StorageError {
 
   private implicit val config: Configuration = Configuration.default.withDiscriminator("@type")
 
-  private val derivedEncoder = deriveEncoder[StorageError].mapJson(jsonError)
+  private val derivedEncoder = deriveConfiguredEncoder[StorageError].mapJson(jsonError)
 
   implicit val storageErrorEncoder: Encoder[StorageError] =
     Encoder.instance(r => derivedEncoder(r) deepMerge Json.obj("reason" -> Json.fromString(r.msg)))
