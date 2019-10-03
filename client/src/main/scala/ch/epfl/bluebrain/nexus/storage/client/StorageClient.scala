@@ -42,6 +42,9 @@ class StorageClient[F[_]] private[client] (
     emptyBody: HttpClient[F, NotUsed]
 )(implicit F: Effect[F], ec: ExecutionContext) {
 
+  /**
+    * Fetches the service description information (name and version)
+    */
   def serviceDescription: F[ServiceDescription] =
     serviceDesc(Get(config.iri.toAkkaUri))
 
