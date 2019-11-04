@@ -11,6 +11,7 @@ use crate::errors::Failure;
 use crate::errors::Failure::*;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::fs::Metadata;
 
 pub fn apply_permissions(path: &str) -> Result<(), Failure> {
     check_path(path).and_then(check_links).and_then(visit_all)
@@ -55,7 +56,7 @@ fn add_parent_permissions(parent: &Path) -> Result<(), Failure> {
 }
 
 fn visit_all(path: &Path) -> Result<(), Failure> {
-    let parent_perms = path.parent().map_or(Ok(()), |parent| add_parent_permissions(parent));
+    let parent_result = path.parent().map_or(Ok(()), |p| add_parent_permissions(p).and_then(|_| set_group(p)));
     let result: Result<Vec<()>, Failure> = WalkDir::new(path)
         .into_iter()
         .map(|e| {
@@ -68,14 +69,21 @@ fn visit_all(path: &Path) -> Result<(), Failure> {
             }
         })
         .collect();
-    parent_perms.and_then(|_| result.map(|_| ()))
+    parent_result.and_then(|_| result.map(|_| ()))
 
 }
 
 fn set_owner(path: &Path) -> Result<(), Failure> {
+    set_custom_owner(path, get_uid()?, get_gid()?)
+}
+
+fn set_group(path: &Path) -> Result<(), Failure> {
+    let metadata = fetch_metadata(path);
+    set_custom_owner(path, metadata.uid(), get_gid()?)
+}
+
+fn set_custom_owner(path: &Path, uid: u32, gid: u32) -> Result<(), Failure> {
     let p = CString::new(path.as_os_str().as_bytes()).map_err(|_| PathCannotHaveNull)?;
-    let uid = get_uid()?;
-    let gid = get_gid()?;
     let chown = unsafe { chown(p.as_ptr() as *const i8, uid, gid) };
     if chown == 0 {
         Ok(())
@@ -95,8 +103,11 @@ fn set_permissions(path: &Path, mask: u32) -> Result<(), Failure> {
 }
 
 fn fetch_permissions(path: &Path) -> u32 {
-    let _metadata = fs::metadata(path).expect("failed to read file metadata");
-    _metadata.permissions().mode()
+    fetch_metadata(path).permissions().mode()
+}
+
+fn fetch_metadata(path: &Path) -> Metadata {
+    fs::metadata(path).expect("failed to read file metadata")
 }
 
 #[cfg(test)]
@@ -131,6 +142,19 @@ mod tests {
         check_owner(
             p,
             get_uid().expect("failed to read UID"),
+            get_gid().expect("failed to read GID"),
+        );
+        assert!(fs::remove_file(p).is_ok());
+    }
+
+    #[test]
+    fn test_set_group() {
+        setup();
+        let p = Path::new("/tmp/nexus-fixer/batman");
+        assert!(touch(p).is_ok());
+        assert!(set_owner(p).is_ok());
+        check_group(
+            p,
             get_gid().expect("failed to read GID"),
         );
         assert!(fs::remove_file(p).is_ok());
@@ -210,8 +234,13 @@ mod tests {
     }
 
     fn check_owner(path: &Path, uid: u32, gid: u32) {
-        let metadata = fs::metadata(path).expect("failed to read file metadata");
+        let metadata = fetch_metadata(path);
         assert_eq!(metadata.uid(), uid);
+        assert_eq!(metadata.gid(), gid);
+    }
+
+    fn check_group(path: &Path, gid: u32) {
+        let metadata = fetch_metadata(path);
         assert_eq!(metadata.gid(), gid);
     }
 
