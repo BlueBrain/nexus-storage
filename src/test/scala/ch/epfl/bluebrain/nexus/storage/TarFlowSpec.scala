@@ -4,7 +4,6 @@ import java.io.ByteArrayInputStream
 import java.nio.file.{Files, Path, Paths}
 
 import akka.actor.ActorSystem
-import akka.stream.{ActorMaterializer, Materializer}
 import akka.stream.alpakka.file.scaladsl.Directory
 import akka.stream.scaladsl.{FileIO, Source}
 import akka.testkit.TestKit
@@ -28,10 +27,9 @@ class TarFlowSpec
     with Inspectors
     with BeforeAndAfterAll {
 
-  implicit val mt: Materializer = ActorMaterializer()
-  val basePath                  = Files.createTempDirectory("tarflow")
-  val dir1                      = basePath.resolve("one")
-  val dir2                      = basePath.resolve("two")
+  val basePath = Files.createTempDirectory("tarflow")
+  val dir1     = basePath.resolve("one")
+  val dir2     = basePath.resolve("two")
 
   override def afterAll(): Unit = {
     super.afterAll()

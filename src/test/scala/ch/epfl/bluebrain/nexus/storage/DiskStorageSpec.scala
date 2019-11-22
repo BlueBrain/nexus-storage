@@ -7,7 +7,6 @@ import java.nio.file.{Files, Paths}
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.Uri
 import akka.stream.scaladsl.{Sink, Source}
-import akka.stream.{ActorMaterializer, Materializer}
 import akka.testkit.TestKit
 import akka.util.ByteString
 import cats.effect.IO
@@ -45,7 +44,6 @@ class DiskStorageSpec
   override implicit def patienceConfig: PatienceConfig = PatienceConfig(3 second, 15 milliseconds)
 
   implicit val ec: ExecutionContext = system.dispatcher
-  implicit val mt: Materializer     = ActorMaterializer()
 
   val rootPath = Files.createTempDirectory("storage-test")
   val sConfig  = StorageConfig(rootPath, Paths.get("nexus"), fixerEnabled = true, List("/bin/echo"))

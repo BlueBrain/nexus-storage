@@ -4,16 +4,17 @@ import java.nio.file.Path
 import java.time.Clock
 
 import akka.NotUsed
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
 import akka.stream.javadsl.Sink
 import akka.stream.scaladsl.{Flow, Keep, Source}
-import akka.stream.{ActorMaterializer, OverflowStrategy, QueueOfferResult}
+import akka.stream.{OverflowStrategy, QueueOfferResult}
 import cats.effect.Effect
 import cats.effect.implicits._
 import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
 import ch.epfl.bluebrain.nexus.storage.attributes.AttributesCacheActor.Protocol._
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.DigestConfig
 import akka.http.scaladsl.model.MediaTypes.`application/octet-stream`
+
 import scala.collection.mutable
 import scala.concurrent.duration._
 
@@ -32,10 +33,11 @@ class AttributesCacheActor[F[_]: Effect, S](computation: AttributesComputation[F
 ) extends Actor
     with ActorLogging {
 
+  private implicit val as: ActorSystem = context.system
+
   import context.dispatcher
   private val map         = mutable.LinkedHashMap.empty[String, Either[Long, FileAttributes]]
   private val selfRef     = self
-  private implicit val mt = ActorMaterializer()
 
   private val attributesComputation: Flow[Compute, Option[Put], NotUsed] =
     Flow[Compute].mapAsyncUnordered(config.concurrentComputations) {
