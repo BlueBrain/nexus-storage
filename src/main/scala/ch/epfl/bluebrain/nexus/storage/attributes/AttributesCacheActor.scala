@@ -36,8 +36,8 @@ class AttributesCacheActor[F[_]: Effect, S](computation: AttributesComputation[F
   private implicit val as: ActorSystem = context.system
 
   import context.dispatcher
-  private val map         = mutable.LinkedHashMap.empty[String, Either[Long, FileAttributes]]
-  private val selfRef     = self
+  private val map     = mutable.LinkedHashMap.empty[String, Either[Long, FileAttributes]]
+  private val selfRef = self
 
   private val attributesComputation: Flow[Compute, Option[Put], NotUsed] =
     Flow[Compute].mapAsyncUnordered(config.concurrentComputations) {

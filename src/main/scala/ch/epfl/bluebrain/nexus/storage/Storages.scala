@@ -224,7 +224,8 @@ object Storages {
         dirContainsLink(absSourcePath).flatMap {
           case true  => F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
           case false => computeSizeAndMove(isDir = true)
-        } else F.pure(Left(PathNotFound(name, sourceRelativePath)))
+        }
+      else F.pure(Left(PathNotFound(name, sourceRelativePath)))
     }
 
     def getFile(
