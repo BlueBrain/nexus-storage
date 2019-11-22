@@ -155,7 +155,7 @@ object Storages {
               .toMat(FileIO.toPath(absFilePath)) {
                 case (digFuture, ioFuture) =>
                   digFuture.zipWith(ioFuture) {
-                    case (digest, io) if io.wasSuccessful && absFilePath.toFile.exists() =>
+                    case (digest, io) if absFilePath.toFile.exists() =>
                       Future(FileAttributes(s"file://$absFilePath", io.count, digest, detectMediaType(absFilePath)))
                     case _ =>
                       Future.failed(InternalError(s"I/O error writing file to path '$relativeFilePath'"))
@@ -224,7 +224,8 @@ object Storages {
         dirContainsLink(absSourcePath).flatMap {
           case true  => F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
           case false => computeSizeAndMove(isDir = true)
-        } else F.pure(Left(PathNotFound(name, sourceRelativePath)))
+        }
+      else F.pure(Left(PathNotFound(name, sourceRelativePath)))
     }
 
     def getFile(

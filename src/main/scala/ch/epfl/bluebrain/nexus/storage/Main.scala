@@ -7,7 +7,6 @@ import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
-import akka.stream.{ActorMaterializer, Materializer}
 import akka.util.Timeout
 import cats.effect.Effect
 import ch.epfl.bluebrain.nexus.iam.client.IamClient
@@ -59,7 +58,6 @@ object Main {
 
     implicit val as: ActorSystem            = ActorSystem(appConfig.description.fullName, config)
     implicit val ec: ExecutionContext       = as.dispatcher
-    implicit val mt: Materializer           = ActorMaterializer()
     implicit val eff: Effect[Task]          = Task.catsEffect(Scheduler.global)
     implicit val iamClient: IamClient[Task] = IamClient[Task]
     implicit val timeout                    = Timeout(1 minute)

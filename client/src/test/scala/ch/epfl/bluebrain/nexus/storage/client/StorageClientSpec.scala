@@ -8,7 +8,6 @@ import akka.http.scaladsl.model.Multipart.FormData
 import akka.http.scaladsl.model.Multipart.FormData.BodyPart
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Source
 import akka.testkit.TestKit
 import akka.util.ByteString
@@ -50,8 +49,7 @@ class StorageClientSpec
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(5 seconds, 15 milliseconds)
 
-  implicit val ec: ExecutionContext  = system.dispatcher
-  implicit val mt: ActorMaterializer = ActorMaterializer()
+  implicit val ec: ExecutionContext = system.dispatcher
 
   private val config = StorageClientConfig(url"https://nexus.example.com".value, "v1")
   private val token  = OAuth2BearerToken("token")

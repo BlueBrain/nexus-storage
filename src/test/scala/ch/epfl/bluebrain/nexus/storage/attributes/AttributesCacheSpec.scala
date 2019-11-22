@@ -108,7 +108,7 @@ class AttributesCacheSpec
 
       val diff = System.currentTimeMillis() - time
       diff should be > 4000L
-      diff should be < 5000L
+      diff should be < 6500L
 
       forAll(list) {
         case (path, attr) =>
