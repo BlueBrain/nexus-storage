@@ -8,17 +8,19 @@ import akka.stream.alpakka.file.scaladsl.Directory
 import akka.stream.scaladsl.{FileIO, Source}
 import akka.testkit.TestKit
 import akka.util.ByteString
-import ch.epfl.bluebrain.nexus.commons.test.Randomness
+import ch.epfl.bluebrain.nexus.commons.test.{EitherValues, Randomness}
 import ch.epfl.bluebrain.nexus.commons.test.io.IOEitherValues
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.io.FileUtils
-import org.scalatest._
+import org.scalatest.{BeforeAndAfterAll, Inspectors, OptionValues}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import scala.annotation.tailrec
 
 class TarFlowSpec
     extends TestKit(ActorSystem("TarFlowSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with IOEitherValues
     with Randomness

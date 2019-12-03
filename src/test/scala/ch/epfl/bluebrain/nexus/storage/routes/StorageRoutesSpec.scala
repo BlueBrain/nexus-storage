@@ -32,13 +32,15 @@ import io.circe.Json
 import monix.eval.Task
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{Matchers, OptionValues, WordSpecLike}
 import ch.epfl.bluebrain.nexus.rdf.syntax._
+import org.scalatest.OptionValues
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import scala.concurrent.duration._
 
 class StorageRoutesSpec
-    extends WordSpecLike
+    extends AnyWordSpecLike
     with Matchers
     with ScalatestRouteTest
     with IdiomaticMockito
@@ -48,7 +50,7 @@ class StorageRoutesSpec
     with OptionValues
     with ScalaFutures {
 
-  override implicit def patienceConfig: PatienceConfig = PatienceConfig(3 second, 15 milliseconds)
+  override implicit def patienceConfig: PatienceConfig = PatienceConfig(3.second, 15.milliseconds)
 
   implicit val appConfig: AppConfig        = Settings(system).appConfig
   implicit val iamClient: IamClient[Task]  = mock[IamClient[Task]]

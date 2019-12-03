@@ -1,11 +1,13 @@
 package ch.epfl.bluebrain.nexus.storage.client
 
+import ch.epfl.bluebrain.nexus.commons.test.EitherValues
 import ch.epfl.bluebrain.nexus.rdf.Iri.Urn
 import ch.epfl.bluebrain.nexus.rdf.syntax._
 import ch.epfl.bluebrain.nexus.storage.client.config.StorageClientConfig
-import org.scalatest.{EitherValues, Matchers, WordSpecLike}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
-class StorageClientConfigSpec extends WordSpecLike with Matchers with EitherValues {
+class StorageClientConfigSpec extends AnyWordSpecLike with Matchers with EitherValues {
 
   "A StorageClientConfig" should {
 
@@ -18,8 +20,8 @@ class StorageClientConfigSpec extends WordSpecLike with Matchers with EitherValu
     }
 
     "build from Urn" in {
-      StorageClientConfig(Urn("urn:ietf:rfc:2648/subresource/v1").right.value) shouldEqual
-        (StorageClientConfig(Urn("urn:ietf:rfc:2648/subresource").right.value, "v1"))
+      StorageClientConfig(Urn("urn:ietf:rfc:2648/subresource/v1").rightValue) shouldEqual
+        (StorageClientConfig(Urn("urn:ietf:rfc:2648/subresource").rightValue, "v1"))
     }
   }
 }

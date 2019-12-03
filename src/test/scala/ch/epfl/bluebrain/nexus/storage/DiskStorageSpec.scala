@@ -10,7 +10,7 @@ import akka.stream.scaladsl.{Sink, Source}
 import akka.testkit.TestKit
 import akka.util.ByteString
 import cats.effect.IO
-import ch.epfl.bluebrain.nexus.commons.test.Randomness
+import ch.epfl.bluebrain.nexus.commons.test.{EitherValues, Randomness}
 import ch.epfl.bluebrain.nexus.commons.test.io.IOEitherValues
 import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
 import ch.epfl.bluebrain.nexus.storage.Rejection.{PathAlreadyExists, PathNotFound}
@@ -22,16 +22,18 @@ import ch.epfl.bluebrain.nexus.storage.config.AppConfig.{DigestConfig, StorageCo
 import ch.epfl.bluebrain.nexus.storage.attributes.AttributesCache
 import org.apache.commons.io.FileUtils
 import org.mockito.IdiomaticMockito
-import org.scalatest._
 import akka.http.scaladsl.model.ContentTypes._
 import akka.http.scaladsl.model.MediaTypes.`application/x-tar`
+import org.scalatest.{BeforeAndAfterAll, Inspectors, OptionValues}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class DiskStorageSpec
     extends TestKit(ActorSystem("DiskStorageSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with Randomness
     with IOEitherValues
@@ -41,13 +43,13 @@ class DiskStorageSpec
     with Inspectors
     with IdiomaticMockito {
 
-  override implicit def patienceConfig: PatienceConfig = PatienceConfig(3 second, 15 milliseconds)
+  override implicit def patienceConfig: PatienceConfig = PatienceConfig(3.second, 15.milliseconds)
 
   implicit val ec: ExecutionContext = system.dispatcher
 
   val rootPath = Files.createTempDirectory("storage-test")
   val sConfig  = StorageConfig(rootPath, Paths.get("nexus"), fixerEnabled = true, List("/bin/echo"))
-  val dConfig  = DigestConfig("SHA-256", 1L, 1, 1, 1 second)
+  val dConfig  = DigestConfig("SHA-256", 1L, 1, 1, 1.second)
   val cache    = mock[AttributesCache[IO]]
   val storage  = new DiskStorage[IO](sConfig, dConfig, cache)
 
@@ -168,8 +170,8 @@ class DiskStorageSpec
       }
 
       "fail when source is inside protected directory" in new AbsoluteDirectoryCreated {
-        val file         = sConfig.protectedDirectory + "/other.txt"
-        val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
+        val file         = sConfig.protectedDirectory.toString + "/other.txt"
+        val absoluteFile = baseRootPath.resolve(Paths.get(file))
         Files.createDirectories(absoluteFile.getParent)
         Files.write(absoluteFile, "something".getBytes(StandardCharsets.UTF_8))
 
@@ -243,14 +245,14 @@ class DiskStorageSpec
       implicit val pathExistsEvidence = PathExists
 
       "fail when it does not exists" in new RelativeDirectoryCreated {
-        storage.getFile(name, relativeFilePath).left.value shouldEqual
+        storage.getFile(name, relativeFilePath).leftValue shouldEqual
           PathNotFound(name, relativeFilePath)
       }
 
       "pass with file" in new RelativeDirectoryCreated {
         val content = "some content"
         Files.write(absoluteFilePath, content.getBytes(StandardCharsets.UTF_8))
-        val (resultSource, resultFilename) = storage.getFile(name, relativeFilePath).right.value
+        val (resultSource, resultFilename) = storage.getFile(name, relativeFilePath).rightValue
         resultFilename.value shouldEqual "file.txt"
         resultSource.runWith(Sink.head).futureValue.decodeString(UTF_8) shouldEqual content
       }
@@ -258,7 +260,7 @@ class DiskStorageSpec
       "pass with directory" in new RelativeDirectoryCreated {
         val content = "some content"
         Files.write(absoluteFilePath, content.getBytes(StandardCharsets.UTF_8))
-        val (resultSource, resultFilename) = storage.getFile(name, Uri.Path(relativeDir)).right.value
+        val (resultSource, resultFilename) = storage.getFile(name, Uri.Path(relativeDir)).rightValue
         resultFilename shouldEqual None
         resultSource.runFold("")(_ ++ _.utf8String).futureValue should include(content)
       }
@@ -269,7 +271,7 @@ class DiskStorageSpec
       implicit val pathExistsEvidence = PathExists
 
       "fail when it does not exists" in new RelativeDirectoryCreated {
-        storage.getFile(name, relativeFilePath).left.value shouldEqual
+        storage.getFile(name, relativeFilePath).leftValue shouldEqual
           PathNotFound(name, relativeFilePath)
       }
 

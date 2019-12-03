@@ -9,14 +9,15 @@ import cats.effect.IO
 import ch.epfl.bluebrain.nexus.commons.test.io.IOValues
 import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
 import ch.epfl.bluebrain.nexus.storage.StorageError.InternalError
-import org.scalatest.{Matchers, WordSpecLike}
 import akka.http.scaladsl.model.ContentTypes.`text/plain(UTF-8)`
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import scala.concurrent.ExecutionContextExecutor
 
 class AttributesComputationSpec
     extends TestKit(ActorSystem("AttributesComputationSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with IOValues {
 

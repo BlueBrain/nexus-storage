@@ -45,7 +45,7 @@ object Main {
 
   def shutdownMonitoring(): Unit = {
     if (sys.env.getOrElse("KAMON_ENABLED", "false").toBoolean) {
-      Await.result(Kamon.stopModules(), 10 seconds)
+      Await.result(Kamon.stopModules(), 10.seconds)
     }
   }
 
@@ -60,7 +60,7 @@ object Main {
     implicit val ec: ExecutionContext       = as.dispatcher
     implicit val eff: Effect[Task]          = Task.catsEffect(Scheduler.global)
     implicit val iamClient: IamClient[Task] = IamClient[Task]
-    implicit val timeout                    = Timeout(1 minute)
+    implicit val timeout                    = Timeout(1.minute)
     implicit val clock                      = Clock.systemUTC
 
     val storages: Storages[Task, AkkaSource] =
@@ -79,7 +79,7 @@ object Main {
         logger.info(s"Bound to ${binding.localAddress.getHostString}: ${binding.localAddress.getPort}")
       case Failure(th) =>
         logger.error(th, "Failed to perform an http binding on {}:{}", appConfig.http.interface, appConfig.http.port)
-        Await.result(as.terminate(), 10 seconds)
+        Await.result(as.terminate(), 10.seconds)
     }
 
     as.registerOnTermination {
@@ -87,7 +87,7 @@ object Main {
     }
     // attempt to leave the cluster before shutting down
     val _ = sys.addShutdownHook {
-      Await.result(as.terminate().map(_ => ()), 10 seconds)
+      Await.result(as.terminate().map(_ => ()), 10.seconds)
     }
   }
 }

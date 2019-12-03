@@ -13,10 +13,11 @@ import ch.epfl.bluebrain.nexus.storage.{AkkaSource, Storages}
 import io.circe.Json
 import monix.eval.Task
 import org.mockito.IdiomaticMockito
-import org.scalatest.{Matchers, WordSpecLike}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 class AppInfoRoutesSpec
-    extends WordSpecLike
+    extends AnyWordSpecLike
     with Matchers
     with ScalatestRouteTest
     with IdiomaticMockito

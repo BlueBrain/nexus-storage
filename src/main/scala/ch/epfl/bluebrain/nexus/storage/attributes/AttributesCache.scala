@@ -12,7 +12,7 @@ import ch.epfl.bluebrain.nexus.storage.File.FileAttributes
 import ch.epfl.bluebrain.nexus.storage.StorageError.{InternalError, OperationTimedOut}
 import ch.epfl.bluebrain.nexus.storage.attributes.AttributesCacheActor.Protocol._
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.DigestConfig
-import journal.Logger
+import com.typesafe.scalalogging.Logger
 
 import scala.util.control.NonFatal
 

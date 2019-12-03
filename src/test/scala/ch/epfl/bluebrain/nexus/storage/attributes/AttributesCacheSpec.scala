@@ -13,16 +13,18 @@ import ch.epfl.bluebrain.nexus.storage.config.AppConfig.DigestConfig
 import monix.eval.Task
 import org.mockito.{IdiomaticMockito, Mockito}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.{BeforeAndAfter, Inspectors, Matchers, WordSpecLike}
+import org.scalatest.{BeforeAndAfter, Inspectors}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import monix.execution.Scheduler.Implicits.global
 import akka.http.scaladsl.model.MediaTypes.{`application/octet-stream`, `image/jpeg`}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 class AttributesCacheSpec
     extends TestKit(ActorSystem("AttributesCacheSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with IdiomaticMockito
     with BeforeAndAfter
@@ -31,11 +33,11 @@ class AttributesCacheSpec
     with Eventually
     with ScalaFutures {
 
-  override implicit def patienceConfig: PatienceConfig = PatienceConfig(12 second, 100 milliseconds)
+  override implicit def patienceConfig: PatienceConfig = PatienceConfig(12.second, 100.milliseconds)
 
-  implicit val config                                           = DigestConfig("SHA-256", maxInMemory = 10, concurrentComputations = 3, 20, 5 seconds)
+  implicit val config                                           = DigestConfig("SHA-256", maxInMemory = 10, concurrentComputations = 3, 20, 5.seconds)
   implicit val computation: AttributesComputation[Task, String] = mock[AttributesComputation[Task, String]]
-  implicit val timeout                                          = Timeout(1 minute)
+  implicit val timeout                                          = Timeout(1.minute)
 
   before {
     Mockito.reset(computation)
