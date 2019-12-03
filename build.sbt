@@ -68,6 +68,7 @@ lazy val storage = project
     moduleName               := "storage",
     coverageFailOnMinimum    := true,
     javaSpecificationVersion := "1.8",
+    Docker / packageName     := "nexus-storage",
     libraryDependencies ++= Seq(
       apacheCompress,
       akkaHttp,
