@@ -3,6 +3,7 @@ package ch.epfl.bluebrain.nexus.storage
 import akka.http.scaladsl.model.{ContentType, Uri}
 import ch.epfl.bluebrain.nexus.rdf.syntax._
 import ch.epfl.bluebrain.nexus.storage.config.Contexts.resourceCtxUri
+import com.github.ghik.silencer.silent
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto._
 import io.circe.{Decoder, Encoder}
@@ -10,6 +11,7 @@ import io.circe.{Decoder, Encoder}
 // $COVERAGE-OFF$
 object File {
 
+  @silent
   private implicit val config: Configuration = Configuration.default
     .copy(transformMemberNames = {
       case "@context" => "@context"
@@ -34,9 +36,11 @@ object File {
     */
   final case class FileAttributes(location: Uri, bytes: Long, digest: Digest, mediaType: ContentType)
   object FileAttributes {
+    @silent
     private implicit val encMediaType: Encoder[ContentType] =
       Encoder.encodeString.contramap(_.value)
 
+    @silent
     private implicit val decMediaType: Decoder[ContentType] =
       Decoder.decodeString.emap(ContentType.parse(_).left.map(_.mkString("\n")))
 

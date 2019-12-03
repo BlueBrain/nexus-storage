@@ -122,7 +122,7 @@ class AttributesCacheActor[F[_]: Effect, S](computation: AttributesComputation[F
   private def now(): Long = clock.instant().toEpochMilli
 
   private def needsReTrigger(time: Long): Boolean = {
-    val elapsed: FiniteDuration = (now() - time) millis
+    val elapsed: FiniteDuration = (now() - time).millis
 
     elapsed > config.retriggerAfter
   }

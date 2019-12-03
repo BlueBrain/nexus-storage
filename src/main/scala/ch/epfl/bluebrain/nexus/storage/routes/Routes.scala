@@ -13,7 +13,7 @@ import ch.epfl.bluebrain.nexus.storage.config.AppConfig._
 import ch.epfl.bluebrain.nexus.storage.routes.instances._
 import ch.epfl.bluebrain.nexus.storage.{AkkaSource, Rejection, StorageError, Storages}
 import ch.epfl.bluebrain.nexus.storage.routes.AuthDirectives._
-import journal.Logger
+import com.typesafe.scalalogging.Logger
 import monix.eval.Task
 
 import scala.util.control.NonFatal

@@ -1,6 +1,6 @@
 package ch.epfl.bluebrain.nexus.storage
 
-import journal.Logger
+import com.typesafe.scalalogging.Logger
 
 import scala.sys.process.ProcessLogger
 

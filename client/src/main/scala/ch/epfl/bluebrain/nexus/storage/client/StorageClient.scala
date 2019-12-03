@@ -24,10 +24,10 @@ import ch.epfl.bluebrain.nexus.storage.client.StorageClient._
 import ch.epfl.bluebrain.nexus.storage.client.StorageClientError._
 import ch.epfl.bluebrain.nexus.storage.client.config.StorageClientConfig
 import ch.epfl.bluebrain.nexus.storage.client.types.{FileAttributes, LinkFile, ServiceDescription}
+import com.typesafe.scalalogging.Logger
 import io.circe
 import io.circe.parser.parse
 import io.circe.{DecodingFailure, ParsingFailure}
-import journal.Logger
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
