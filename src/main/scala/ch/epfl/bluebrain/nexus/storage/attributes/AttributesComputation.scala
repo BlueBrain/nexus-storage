@@ -4,16 +4,16 @@ import java.nio.file.{Files, Path}
 import java.security.MessageDigest
 
 import akka.http.scaladsl.model.HttpCharsets.`UTF-8`
-import akka.http.scaladsl.model.{ContentType, MediaType, MediaTypes}
 import akka.http.scaladsl.model.MediaTypes.{`application/octet-stream`, `application/x-tar`}
+import akka.http.scaladsl.model.{ContentType, MediaType, MediaTypes}
 import akka.stream.Materializer
-import cats.implicits._
 import akka.stream.scaladsl.{Keep, Sink}
 import akka.util.ByteString
 import cats.effect.Effect
+import cats.implicits._
 import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
 import ch.epfl.bluebrain.nexus.storage.StorageError.InternalError
-import ch.epfl.bluebrain.nexus.storage.{fileSource, folderSource, AkkaSource}
+import ch.epfl.bluebrain.nexus.storage._
 import org.apache.commons.io.FilenameUtils
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -84,7 +84,7 @@ object AttributesComputation {
               .alsoToMat(sinkSize)(Keep.right)
               .toMat(sinkDigest(msgDigest)) { (bytesF, digestF) =>
                 (bytesF, digestF).mapN {
-                  case (bytes, digest) => FileAttributes(s"file://$path", bytes, digest, detectMediaType(path, isDir))
+                  case (bytes, digest) => FileAttributes(path.toAkkaUri, bytes, digest, detectMediaType(path, isDir))
                 }
               }
               .run()
