@@ -1,5 +1,6 @@
 package ch.epfl.bluebrain.nexus.storage
 
+import java.net.URLDecoder
 import java.nio.file.StandardCopyOption._
 import java.nio.file.{Files, Path, Paths}
 import java.security.MessageDigest
@@ -121,13 +122,16 @@ object Storages {
       F: Effect[F]
   ) extends Storages[F, AkkaSource] {
 
+    private def decode(path: Uri.Path): String =
+      Try(URLDecoder.decode(path.toString, "UTF-8")).getOrElse(path.toString())
+
     private def basePath(name: String, protectedDir: Boolean = true): Path = {
       val path = config.rootVolume.resolve(name).normalize()
       if (protectedDir) path.resolve(config.protectedDirectory).normalize() else path
     }
 
     private def filePath(name: String, relativePath: Uri.Path, protectedDir: Boolean = true): Path =
-      basePath(name, protectedDir).resolve(Paths.get(relativePath.toString())).normalize()
+      basePath(name, protectedDir).resolve(Paths.get(decode(relativePath))).normalize()
 
     def exists(name: String): BucketExistence = {
       val path = basePath(name)
@@ -156,7 +160,7 @@ object Storages {
                 case (digFuture, ioFuture) =>
                   digFuture.zipWith(ioFuture) {
                     case (digest, io) if absFilePath.toFile.exists() =>
-                      Future(FileAttributes(s"file://$absFilePath", io.count, digest, detectMediaType(absFilePath)))
+                      Future(FileAttributes(absFilePath.toAkkaUri, io.count, digest, detectMediaType(absFilePath)))
                     case _ =>
                       Future.failed(InternalError(s"I/O error writing file to path '$relativeFilePath'"))
                   }
@@ -196,7 +200,7 @@ object Storages {
             F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
             F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
             F.pure(cache.asyncComputePut(absDestPath, digestConfig.algorithm)) >>
-            F.pure(Right(FileAttributes(s"file://$absDestPath", computedSize, Digest.empty, mediaType)))
+            F.pure(Right(FileAttributes(absDestPath.toAkkaUri, computedSize, Digest.empty, mediaType)))
         }
       }
 

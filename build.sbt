@@ -26,15 +26,15 @@ scalafmt: {
 
 // Dependency versions
 val akkaVersion           = "2.6.0"
-val akkaHttpVersion       = "10.1.10"
+val akkaHttpVersion       = "10.1.11"
 val apacheCompressVersion = "1.19"
 val alpakkaVersion        = "1.1.2"
-val catsVersion           = "2.0.0"
+val catsVersion           = "2.1.0"
 val catsEffectVersion     = "2.0.0"
 val circeVersion          = "0.12.3"
 val commonsVersion        = "0.20.0"
 val iamVersion            = "1.2.0+16-382dc073"
-val mockitoVersion        = "1.7.1"
+val mockitoVersion        = "1.10.1"
 val monixVersion          = "3.1.0"
 val pureconfigVersion     = "0.12.1"
 val scalaTestVersion      = "3.1.0"

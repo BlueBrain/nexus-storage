@@ -5,15 +5,16 @@ import java.time.Clock
 
 import akka.NotUsed
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
+import akka.http.scaladsl.model.MediaTypes.`application/octet-stream`
 import akka.stream.javadsl.Sink
 import akka.stream.scaladsl.{Flow, Keep, Source}
 import akka.stream.{OverflowStrategy, QueueOfferResult}
 import cats.effect.Effect
 import cats.effect.implicits._
 import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
+import ch.epfl.bluebrain.nexus.storage._
 import ch.epfl.bluebrain.nexus.storage.attributes.AttributesCacheActor.Protocol._
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.DigestConfig
-import akka.http.scaladsl.model.MediaTypes.`application/octet-stream`
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -114,7 +115,7 @@ class AttributesCacheActor[F[_]: Effect, S](computation: AttributesComputation[F
   }
 
   private def emptyAttributes(path: Path) =
-    FileAttributes(s"file://$path", 0L, Digest.empty, `application/octet-stream`)
+    FileAttributes(path.toAkkaUri, 0L, Digest.empty, `application/octet-stream`)
 
   private def removeOldest(n: Int) =
     map --= map.take(n).keySet

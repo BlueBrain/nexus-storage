@@ -153,7 +153,7 @@ class DiskStorageSpec
 
       "fail when call to nexus-fixer fails" in new AbsoluteDirectoryCreated {
         val badStorage   = new DiskStorage[IO](sConfig.copy(fixerCommand = List("/bin/false")), dConfig, cache)
-        val file         = "some/folder/myfile.txt"
+        val file         = "some/folder/my !file.txt"
         val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
         Files.createDirectories(absoluteFile.getParent)
         Files.write(absoluteFile, "something".getBytes(StandardCharsets.UTF_8))
@@ -180,22 +180,22 @@ class DiskStorageSpec
       }
 
       "fail when destination already exists" in new AbsoluteDirectoryCreated {
-        val file         = "some/folder/myfile.txt"
+        val file         = "some/folder/my !file.txt"
         val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
         Files.createDirectories(absoluteFile.getParent)
         Files.write(absoluteFile, "something".getBytes(StandardCharsets.UTF_8))
 
-        val fileDest = basePath.resolve(Paths.get("myfile.txt"))
+        val fileDest = basePath.resolve(Paths.get("my !file.txt"))
         Files.write(fileDest, "something".getBytes(StandardCharsets.UTF_8))
         storage
-          .moveFile(name, Uri.Path(file), Uri.Path("myfile.txt"))
+          .moveFile(name, Uri.Path(file), Uri.Path("my !file.txt"))
           .rejected[PathAlreadyExists] shouldEqual
-          PathAlreadyExists(name, Uri.Path("myfile.txt"))
+          PathAlreadyExists(name, Uri.Path("my !file.txt"))
       }
 
       "fail when destination is out of bucket scope" in new AbsoluteDirectoryCreated {
-        val file         = "some/folder/myfile.txt"
-        val dest         = Uri.Path("../some/other.txt")
+        val file         = "some/folder/my !file.txt"
+        val dest         = Uri.Path("../some/other path.txt")
         val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
         Files.createDirectories(absoluteFile.getParent)
 
@@ -208,17 +208,17 @@ class DiskStorageSpec
       }
 
       "pass on file" in new AbsoluteDirectoryCreated {
-        val file         = "some/folder/myfile.txt"
+        val file         = "some/folder/my !file.txt"
         val absoluteFile = baseRootPath.resolve(Paths.get(file.toString))
         Files.createDirectories(absoluteFile.getParent)
 
         val content = "some content"
         Files.write(absoluteFile, content.getBytes(StandardCharsets.UTF_8))
 
-        storage.moveFile(name, Uri.Path(file), Uri.Path("some/other.txt")).accepted shouldEqual
-          FileAttributes(s"file://${basePath.resolve("some/other.txt")}", 12L, Digest.empty, `text/plain(UTF-8)`)
+        storage.moveFile(name, Uri.Path(file), Uri.Path("some/other path.txt")).accepted shouldEqual
+          FileAttributes(s"file://${basePath.resolve("some/other%20path.txt")}", 12L, Digest.empty, `text/plain(UTF-8)`)
         Files.exists(absoluteFile) shouldEqual false
-        Files.exists(basePath.resolve("some/other.txt")) shouldEqual true
+        Files.exists(basePath.resolve("some/other path.txt")) shouldEqual true
       }
 
       "pass on directory" in new AbsoluteDirectoryCreated {
@@ -226,7 +226,7 @@ class DiskStorageSpec
         val absoluteDir = baseRootPath.resolve(Paths.get(dir.toString))
         Files.createDirectories(absoluteDir)
 
-        val absoluteFile = absoluteDir.resolve(Paths.get("myfile.txt"))
+        val absoluteFile = absoluteDir.resolve(Paths.get("my !file.txt"))
         val content      = "some content"
         Files.write(absoluteFile, content.getBytes(StandardCharsets.UTF_8))
 
@@ -236,7 +236,7 @@ class DiskStorageSpec
         Files.exists(absoluteDir) shouldEqual false
         Files.exists(absoluteFile) shouldEqual false
         Files.exists(resolvedDir) shouldEqual true
-        Files.exists(basePath.resolve("some/other/myfile.txt")) shouldEqual true
+        Files.exists(basePath.resolve("some/other/my !file.txt")) shouldEqual true
       }
     }
 
