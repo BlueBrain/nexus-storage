@@ -10,7 +10,6 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.unmarshalling.{FromEntityUnmarshaller, Unmarshaller}
 import akka.stream.scaladsl.Source
-import akka.stream.{ActorMaterializer, Materializer}
 import akka.util.ByteString
 import cats.effect.{Effect, IO, LiftIO}
 import cats.implicits._
@@ -25,10 +24,10 @@ import ch.epfl.bluebrain.nexus.storage.client.StorageClient._
 import ch.epfl.bluebrain.nexus.storage.client.StorageClientError._
 import ch.epfl.bluebrain.nexus.storage.client.config.StorageClientConfig
 import ch.epfl.bluebrain.nexus.storage.client.types.{FileAttributes, LinkFile, ServiceDescription}
+import com.typesafe.scalalogging.Logger
 import io.circe
 import io.circe.parser.parse
 import io.circe.{DecodingFailure, ParsingFailure}
-import journal.Logger
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
@@ -162,8 +161,8 @@ object StorageClient {
   private def httpClient[F[_], A: ClassTag](
       implicit L: LiftIO[F],
       F: Effect[F],
+      as: ActorSystem,
       ec: ExecutionContext,
-      mt: Materializer,
       cl: UntypedHttpClient[F],
       um: FromEntityUnmarshaller[A]
   ): HttpClient[F, A] = new HttpClient[F, A] {
@@ -248,7 +247,6 @@ object StorageClient {
     * @return a new [[StorageClient]]
     */
   final def apply[F[_]: Effect](implicit config: StorageClientConfig, as: ActorSystem): StorageClient[F] = {
-    implicit val mt: ActorMaterializer     = ActorMaterializer()
     implicit val ec: ExecutionContext      = as.dispatcher
     implicit val ucl: UntypedHttpClient[F] = HttpClient.untyped[F]
     new StorageClient(

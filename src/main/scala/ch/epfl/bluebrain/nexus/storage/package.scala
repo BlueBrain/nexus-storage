@@ -69,6 +69,14 @@ package object storage {
       */
     def descendantOf(parent: JavaPath): Boolean =
       inner(parent, path.getParent)
+
+    /**
+      * Converts a Java Path to an Akka [[Uri]]
+      */
+    def toAkkaUri: Uri = {
+      val pathString = path.toUri.toString
+      if (pathString.endsWith("/")) Uri(pathString.dropRight(1)) else Uri(pathString)
+    }
   }
 
   /**

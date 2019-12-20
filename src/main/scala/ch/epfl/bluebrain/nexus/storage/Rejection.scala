@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.Uri.Path
 import akka.http.scaladsl.server.{Rejection => AkkaRejection}
 import ch.epfl.bluebrain.nexus.commons.http.directives.StatusFrom
+import com.github.ghik.silencer.silent
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.deriveConfiguredEncoder
 import io.circe.{Encoder, Json}
@@ -71,6 +72,7 @@ object Rejection {
     case _: PathNotFound      => StatusCodes.NotFound
   }
 
+  @silent
   implicit val rejectionEncoder: Encoder[Rejection] = {
     implicit val rejectionConfig: Configuration = Configuration.default.withDiscriminator("@type")
     val enc                                     = deriveConfiguredEncoder[Rejection].mapJson(jsonError)

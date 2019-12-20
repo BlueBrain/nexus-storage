@@ -9,6 +9,9 @@ use walkdir::WalkDir;
 use crate::config::*;
 use crate::errors::Failure;
 use crate::errors::Failure::*;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::fs::Metadata;
 
 pub fn apply_permissions(path: &str) -> Result<(), Failure> {
     check_path(path).and_then(check_links).and_then(visit_all)
@@ -47,7 +50,13 @@ fn check_links(path: &Path) -> Result<&Path, Failure> {
     })
 }
 
+fn add_parent_permissions(parent: &Path) -> Result<(), Failure> {
+    let mask = fetch_permissions(parent) | CHMOD_MASK_WX_GROUP;
+    set_permissions(parent, mask)
+}
+
 fn visit_all(path: &Path) -> Result<(), Failure> {
+    let parent_result = path.parent().map_or(Ok(()), |p| add_parent_permissions(p).and_then(|_| set_group(p)));
     let result: Result<Vec<()>, Failure> = WalkDir::new(path)
         .into_iter()
         .map(|e| {
@@ -60,13 +69,21 @@ fn visit_all(path: &Path) -> Result<(), Failure> {
             }
         })
         .collect();
-    result.map(|_| ())
+    parent_result.and_then(|_| result.map(|_| ()))
+
 }
 
 fn set_owner(path: &Path) -> Result<(), Failure> {
+    set_custom_owner(path, get_uid()?, get_gid()?)
+}
+
+fn set_group(path: &Path) -> Result<(), Failure> {
+    let metadata = fetch_metadata(path);
+    set_custom_owner(path, metadata.uid(), get_gid()?)
+}
+
+fn set_custom_owner(path: &Path, uid: u32, gid: u32) -> Result<(), Failure> {
     let p = CString::new(path.as_os_str().as_bytes()).map_err(|_| PathCannotHaveNull)?;
-    let uid = get_uid()?;
-    let gid = get_gid()?;
     let chown = unsafe { chown(p.as_ptr() as *const i8, uid, gid) };
     if chown == 0 {
         Ok(())
@@ -85,11 +102,18 @@ fn set_permissions(path: &Path, mask: u32) -> Result<(), Failure> {
     }
 }
 
+fn fetch_permissions(path: &Path) -> u32 {
+    fetch_metadata(path).permissions().mode()
+}
+
+fn fetch_metadata(path: &Path) -> Metadata {
+    fs::metadata(path).expect("failed to read file metadata")
+}
+
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use std::io;
-    use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
+    use std::os::unix::fs::{symlink, MetadataExt};
 
     use rand::{thread_rng, Rng};
 
@@ -118,6 +142,19 @@ mod tests {
         check_owner(
             p,
             get_uid().expect("failed to read UID"),
+            get_gid().expect("failed to read GID"),
+        );
+        assert!(fs::remove_file(p).is_ok());
+    }
+
+    #[test]
+    fn test_set_group() {
+        setup();
+        let p = Path::new("/tmp/nexus-fixer/batman");
+        assert!(touch(p).is_ok());
+        assert!(set_owner(p).is_ok());
+        check_group(
+            p,
             get_gid().expect("failed to read GID"),
         );
         assert!(fs::remove_file(p).is_ok());
@@ -171,6 +208,7 @@ mod tests {
         assert!(touch(file_a).is_ok());
         assert!(touch(file_b).is_ok());
         assert!(touch(file_c).is_ok());
+        check_permissions(Path::new("/tmp/nexus-fixer/"), 0o755);
         assert!(visit_all(Path::new("/tmp/nexus-fixer/a")).is_ok());
 
         let uid = get_uid().expect("failed to read UID");
@@ -183,6 +221,8 @@ mod tests {
         check_owner(Path::new("/tmp/nexus-fixer/a/b"), uid, gid);
         check_permissions(Path::new("/tmp/nexus-fixer/a/b/c"), DIR_MASK);
         check_owner(Path::new("/tmp/nexus-fixer/a/b/c"), uid, gid);
+        check_permissions(Path::new("/tmp/nexus-fixer/"), 0o775);
+
         // files
         check_permissions(file_a, FILE_MASK);
         check_owner(file_a, uid, gid);
@@ -194,14 +234,18 @@ mod tests {
     }
 
     fn check_owner(path: &Path, uid: u32, gid: u32) {
-        let metadata = fs::metadata(path).expect("failed to read file metadata");
+        let metadata = fetch_metadata(path);
         assert_eq!(metadata.uid(), uid);
         assert_eq!(metadata.gid(), gid);
     }
 
+    fn check_group(path: &Path, gid: u32) {
+        let metadata = fetch_metadata(path);
+        assert_eq!(metadata.gid(), gid);
+    }
+
     fn check_permissions(path: &Path, mask: u32) {
-        let metadata = fs::metadata(path).expect("failed to read file metadata");
-        assert_eq!(metadata.permissions().mode() & 0o777, mask);
+        assert_eq!(fetch_permissions(path) & 0o777, mask);
     }
 
     fn random_mask() -> u32 {

@@ -25,19 +25,19 @@ scalafmt: {
  */
 
 // Dependency versions
-val akkaVersion           = "2.5.25"
-val akkaHttpVersion       = "10.1.10"
+val akkaVersion           = "2.6.0"
+val akkaHttpVersion       = "10.1.11"
 val apacheCompressVersion = "1.19"
-val alpakkaVersion        = "1.1.1"
-val catsVersion           = "2.0.0"
+val alpakkaVersion        = "1.1.2"
+val catsVersion           = "2.1.0"
 val catsEffectVersion     = "2.0.0"
-val circeVersion          = "0.12.1"
-val commonsVersion        = "0.17.15"
-val iamVersion            = "1.2.1"
-val mockitoVersion        = "1.5.17"
-val monixVersion          = "3.0.0"
-val pureconfigVersion     = "0.12.0"
-val scalaTestVersion      = "3.0.8"
+val circeVersion          = "0.12.3"
+val commonsVersion        = "0.20.0"
+val iamVersion            = "1.2.0+16-382dc073"
+val mockitoVersion        = "1.10.1"
+val monixVersion          = "3.1.0"
+val pureconfigVersion     = "0.12.1"
+val scalaTestVersion      = "3.1.0"
 
 // Dependencies modules
 lazy val akkaHttp        = "com.typesafe.akka"       %% "akka-http"                % akkaHttpVersion
@@ -68,6 +68,7 @@ lazy val storage = project
     moduleName               := "storage",
     coverageFailOnMinimum    := true,
     javaSpecificationVersion := "1.8",
+    Docker / packageName     := "nexus-storage",
     libraryDependencies ++= Seq(
       apacheCompress,
       akkaHttp,
@@ -92,13 +93,7 @@ lazy val storage = project
       baseDirectory.value / "nexus-storage.jar"
     ),
     mappings in Universal := {
-      val universalMappings = (mappings in Universal).value :+ cargo.value
-      universalMappings.foldLeft(Vector.empty[(File, String)]) {
-        case (acc, (file, filename)) if filename.contains("kanela-agent") =>
-          acc :+ (file, "lib/instrumentation-agent.jar")
-        case (acc, other) =>
-          acc :+ other
-      }
+      (mappings in Universal).value :+ cargo.value
     }
   )
 

@@ -1,0 +1,103 @@
+name: Continuous Integration
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  release:
+    types: [published]
+jobs:
+  review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: SetupSbt
+        uses: olafurpg/setup-scala@v5
+        with:
+          java-version: adopt@1.11
+      - name: StaticAnalysis
+        run: sbt -Dsbt.color=always -Dsbt.supershell=false clean scalafmtCheck test:scalafmtCheck scalafmtSbtCheck scapegoat
+      - name: Tests
+        run: sbt -Dsbt.color=always -Dsbt.supershell=false clean coverage test coverageReport coverageAggregate
+      - name: BuildFixer
+        run: sbt -Dsbt.color=always -Dsbt.supershell=false clean cargo
+  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+    env:
+      CI: true
+      BINTRAY_USER: ${{ secrets.BINTRAY_USER }}
+      BINTRAY_PASS: ${{ secrets.BINTRAY_PASS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: SetupSbt
+        uses: olafurpg/setup-scala@v5
+        with:
+          java-version: adopt@1.11
+      - name: PublishToBintray
+        run: sbt -Dsbt.color=always -Dsbt.supershell=false releaseEarly
+      - name: PublishToDockerHub
+        run: |
+          sbt -Dsbt.color=always -Dsbt.supershell=false docker:publishLocal
+          echo ${{ secrets.DOCKER_PASS }} | docker login --username ${{ secrets.DOCKER_USER }} --password-stdin
+          docker push bluebrain/nexus-storage:latest
+      - name: TriggerIntegrationTests
+        run: |
+          echo '${{ secrets.JOB_DELETION_MANIFEST }}' | curl -s \
+            -XDELETE \
+            -H"Authorization: Bearer ${{ secrets.JOB_TOKEN }}" \
+            -H"Content-Type: application/yaml" \
+            --data-binary @- \
+            -o /dev/null \
+            ${{ secrets.JOB_ADDRESS }}/test-runner-storage-latest
+          echo '${{ secrets.JOB_MANIFEST }}' | sed -e 's/{VERSION}/latest/g' -e 's/{SERVICE}/storage/g' | curl -s \
+            -XPOST \
+            -H"Authorization: Bearer ${{ secrets.JOB_TOKEN }}" \
+            -H"Content-Type: application/yaml" \
+            --data-binary @- \
+            -o /dev/null \
+            ${{ secrets.JOB_ADDRESS }}
+      - name: RecordCoverage
+        run: sbt -Dsbt.color=always -Dsbt.supershell=false clean coverage test coverageReport coverageAggregate
+      - name: PublishCoverage
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+  release:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+    env:
+      CI: true
+      BINTRAY_USER: ${{ secrets.BINTRAY_USER }}
+      BINTRAY_PASS: ${{ secrets.BINTRAY_PASS }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: SetupSbt
+        uses: olafurpg/setup-scala@v5
+        with:
+          java-version: adopt@1.11
+      - name: SetVersion
+        run: echo ::set-env name=VERSION::$(echo ${GITHUB_REF:11})
+      - name: PublishToBintray
+        run: sbt -Dsbt.color=always -Dsbt.supershell=false releaseEarly
+      - name: PublishToDockerHub
+        run: |
+          sbt -Dsbt.color=always -Dsbt.supershell=false ";set Docker/version := \"${{ env.VERSION }}\"; docker:publishLocal"
+          echo ${{ secrets.DOCKER_PASS }} | docker login --username ${{ secrets.DOCKER_USER }} --password-stdin
+          docker push bluebrain/nexus-storage:${{ env.VERSION }}
+      - name: RecordCoverage
+        run: sbt -Dsbt.color=always -Dsbt.supershell=false clean coverage test coverageReport coverageAggregate
+      - name: PublishCoverage
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

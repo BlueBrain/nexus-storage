@@ -8,14 +8,13 @@ import akka.http.scaladsl.model.Multipart.FormData
 import akka.http.scaladsl.model.Multipart.FormData.BodyPart
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Source
 import akka.testkit.TestKit
 import akka.util.ByteString
 import cats.effect.IO
 import ch.epfl.bluebrain.nexus.commons.http.HttpClient
 import ch.epfl.bluebrain.nexus.commons.test.io.IOOptionValues
-import ch.epfl.bluebrain.nexus.commons.test.{Randomness, Resources}
+import ch.epfl.bluebrain.nexus.commons.test.{EitherValues, Randomness, Resources}
 import ch.epfl.bluebrain.nexus.iam.client.IamClientError
 import ch.epfl.bluebrain.nexus.iam.client.types.AuthToken
 import ch.epfl.bluebrain.nexus.rdf.syntax._
@@ -26,8 +25,10 @@ import ch.epfl.bluebrain.nexus.storage.client.types.FileAttributes.Digest
 import ch.epfl.bluebrain.nexus.storage.client.types.{FileAttributes, ServiceDescription}
 import io.circe.Json
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito, Mockito}
-import org.scalatest._
+import org.scalatest.{BeforeAndAfter, Inspectors}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -35,7 +36,7 @@ import scala.concurrent.duration._
 //noinspection NameBooleanParameters
 class StorageClientSpec
     extends TestKit(ActorSystem("StorageClientSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with ScalaFutures
     with BeforeAndAfter
@@ -48,10 +49,9 @@ class StorageClientSpec
     with Resources
     with Eventually {
 
-  override implicit val patienceConfig: PatienceConfig = PatienceConfig(5 seconds, 15 milliseconds)
+  override implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 15.milliseconds)
 
-  implicit val ec: ExecutionContext  = system.dispatcher
-  implicit val mt: ActorMaterializer = ActorMaterializer()
+  implicit val ec: ExecutionContext = system.dispatcher
 
   private val config = StorageClientConfig(url"https://nexus.example.com".value, "v1")
   private val token  = OAuth2BearerToken("token")
@@ -90,7 +90,7 @@ class StorageClientSpec
   }
 
   private def sourceInChunks(input: String): AkkaSource =
-    Source.fromIterator(() ⇒ input.grouped(10000).map(ByteString(_)))
+    Source.fromIterator(() => input.grouped(10000).map(ByteString(_)))
 
   private def consume(source: AkkaSource): String =
     source.runFold("")(_ ++ _.utf8String).futureValue

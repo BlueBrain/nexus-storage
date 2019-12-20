@@ -10,9 +10,16 @@ import ch.epfl.bluebrain.nexus.commons.test.Resources
 import ch.epfl.bluebrain.nexus.storage.routes.Routes.exceptionHandler
 import ch.epfl.bluebrain.nexus.storage.routes.StorageDirectives._
 import io.circe.Json
-import org.scalatest.{Inspectors, Matchers, WordSpecLike}
+import org.scalatest.Inspectors
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
-class StorageDirectivesSpec extends WordSpecLike with Matchers with ScalatestRouteTest with Inspectors with Resources {
+class StorageDirectivesSpec
+    extends AnyWordSpecLike
+    with Matchers
+    with ScalatestRouteTest
+    with Inspectors
+    with Resources {
 
   "the storage directives" when {
 

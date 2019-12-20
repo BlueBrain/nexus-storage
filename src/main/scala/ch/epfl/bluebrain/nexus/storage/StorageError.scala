@@ -3,6 +3,7 @@ package ch.epfl.bluebrain.nexus.storage
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.Uri.Path
 import ch.epfl.bluebrain.nexus.commons.http.directives.StatusFrom
+import com.github.ghik.silencer.silent
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto.deriveConfiguredEncoder
 import io.circe.{Encoder, Json}
@@ -84,6 +85,7 @@ object StorageError {
     */
   final case class OperationTimedOut(override val msg: String) extends StorageError(msg)
 
+  @silent
   private implicit val config: Configuration = Configuration.default.withDiscriminator("@type")
 
   private val derivedEncoder = deriveConfiguredEncoder[StorageError].mapJson(jsonError)

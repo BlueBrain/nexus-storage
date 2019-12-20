@@ -8,21 +8,24 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import akka.util.Timeout
 import ch.epfl.bluebrain.nexus.commons.test.Randomness
+import ch.epfl.bluebrain.nexus.storage._
 import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
 import ch.epfl.bluebrain.nexus.storage.config.AppConfig.DigestConfig
 import monix.eval.Task
 import org.mockito.{IdiomaticMockito, Mockito}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.{BeforeAndAfter, Inspectors, Matchers, WordSpecLike}
+import org.scalatest.{BeforeAndAfter, Inspectors}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import monix.execution.Scheduler.Implicits.global
 import akka.http.scaladsl.model.MediaTypes.{`application/octet-stream`, `image/jpeg`}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 class AttributesCacheSpec
     extends TestKit(ActorSystem("AttributesCacheSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with IdiomaticMockito
     with BeforeAndAfter
@@ -31,11 +34,11 @@ class AttributesCacheSpec
     with Eventually
     with ScalaFutures {
 
-  override implicit def patienceConfig: PatienceConfig = PatienceConfig(12 second, 100 milliseconds)
+  override implicit def patienceConfig: PatienceConfig = PatienceConfig(12.second, 100.milliseconds)
 
-  implicit val config                                           = DigestConfig("SHA-256", maxInMemory = 10, concurrentComputations = 3, 20, 5 seconds)
+  implicit val config                                           = DigestConfig("SHA-256", maxInMemory = 10, concurrentComputations = 3, 20, 5.seconds)
   implicit val computation: AttributesComputation[Task, String] = mock[AttributesComputation[Task, String]]
-  implicit val timeout                                          = Timeout(1 minute)
+  implicit val timeout                                          = Timeout(1.minute)
 
   before {
     Mockito.reset(computation)
@@ -45,7 +48,7 @@ class AttributesCacheSpec
     val path: Path                      = Paths.get(genString())
     val digest                          = Digest(config.algorithm, genString())
     val attributes                      = FileAttributes(s"file://$path", genInt().toLong, digest, `image/jpeg`)
-    def attributesEmpty(p: Path = path) = FileAttributes(s"file://$p", 0L, Digest.empty, `application/octet-stream`)
+    def attributesEmpty(p: Path = path) = FileAttributes(p.toAkkaUri, 0L, Digest.empty, `application/octet-stream`)
     val counter                         = new AtomicInteger(0)
 
     implicit val clock: Clock = new Clock {
@@ -79,12 +82,9 @@ class AttributesCacheSpec
 
     "verify 2 concurrent computations" in new Ctx {
       val list = List.tabulate(10) { i =>
-        Paths.get(i.toString) -> FileAttributes(
-          s"file://$i",
-          i.toLong,
-          Digest(config.algorithm, i.toString),
-          `image/jpeg`
-        )
+        val path   = Paths.get(i.toString)
+        val digest = Digest(config.algorithm, i.toString)
+        path -> FileAttributes(path.toAkkaUri, i.toLong, digest, `image/jpeg`)
       }
       val time = System.currentTimeMillis()
 
@@ -108,7 +108,7 @@ class AttributesCacheSpec
 
       val diff = System.currentTimeMillis() - time
       diff should be > 4000L
-      diff should be < 5000L
+      diff should be < 6500L
 
       forAll(list) {
         case (path, attr) =>
@@ -118,12 +118,9 @@ class AttributesCacheSpec
 
     "verify remove oldest" in new Ctx {
       val list = List.tabulate(20) { i =>
-        Paths.get(i.toString) -> FileAttributes(
-          s"file://$i",
-          i.toLong,
-          Digest(config.algorithm, i.toString),
-          `image/jpeg`
-        )
+        val path   = Paths.get(i.toString)
+        val digest = Digest(config.algorithm, i.toString)
+        path -> FileAttributes(path.toAkkaUri, i.toLong, digest, `image/jpeg`)
       }
 
       forAll(list) {
@@ -148,12 +145,9 @@ class AttributesCacheSpec
 
     "verify failure is skipped" in new Ctx {
       val list = List.tabulate(5) { i =>
-        Paths.get(i.toString) -> FileAttributes(
-          s"file://$i",
-          i.toLong,
-          Digest(config.algorithm, i.toString),
-          `image/jpeg`
-        )
+        val path   = Paths.get(i.toString)
+        val digest = Digest(config.algorithm, i.toString)
+        path -> FileAttributes(path.toAkkaUri, i.toLong, digest, `image/jpeg`)
       }
 
       forAll(list) {

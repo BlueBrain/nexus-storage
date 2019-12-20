@@ -4,23 +4,24 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
 import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import cats.effect.IO
 import ch.epfl.bluebrain.nexus.commons.test.io.IOValues
 import ch.epfl.bluebrain.nexus.storage.File.{Digest, FileAttributes}
 import ch.epfl.bluebrain.nexus.storage.StorageError.InternalError
-import org.scalatest.{Matchers, WordSpecLike}
 import akka.http.scaladsl.model.ContentTypes.`text/plain(UTF-8)`
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
+
+import scala.concurrent.ExecutionContextExecutor
 
 class AttributesComputationSpec
     extends TestKit(ActorSystem("AttributesComputationSpec"))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with IOValues {
 
-  private implicit val ec = system.dispatcher
-  private implicit val mt = ActorMaterializer()
+  private implicit val ec: ExecutionContextExecutor = system.dispatcher
 
   private trait Ctx {
     val path           = Files.createTempFile("storage-test", ".txt")

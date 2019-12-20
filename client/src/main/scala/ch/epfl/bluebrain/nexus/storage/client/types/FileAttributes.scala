@@ -2,6 +2,7 @@ package ch.epfl.bluebrain.nexus.storage.client.types
 
 import akka.http.scaladsl.model.{ContentType, Uri}
 import ch.epfl.bluebrain.nexus.storage.client.types.FileAttributes.Digest
+import com.github.ghik.silencer.silent
 import io.circe.Decoder
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.semiauto._
@@ -18,8 +19,10 @@ import scala.util.Try
   * @param mediaType the media type of the file
   */
 final case class FileAttributes(location: Uri, bytes: Long, digest: Digest, mediaType: ContentType)
+
 object FileAttributes {
 
+  @silent
   private implicit val config: Configuration =
     Configuration.default
       .copy(transformMemberNames = {
@@ -27,13 +30,14 @@ object FileAttributes {
         case key        => s"_$key"
       })
 
-  private implicit val decUri: Decoder[Uri] =
-    Decoder.decodeString.emapTry(s => Try(Uri(s)))
-
-  private implicit val decMediaType: Decoder[ContentType] =
-    Decoder.decodeString.emap(ContentType.parse(_).left.map(_.mkString("\n")))
-
-  implicit val fileAttrDecoder: Decoder[FileAttributes] = deriveConfiguredDecoder[FileAttributes]
+  @silent
+  implicit val fileAttrDecoder: Decoder[FileAttributes] = {
+    implicit val decUri: Decoder[Uri] =
+      Decoder.decodeString.emapTry(s => Try(Uri(s)))
+    implicit val decMediaType: Decoder[ContentType] =
+      Decoder.decodeString.emap(ContentType.parse(_).left.map(_.mkString("\n")))
+    deriveConfiguredDecoder[FileAttributes]
+  }
 
   /**
     * Digest related information of the file
