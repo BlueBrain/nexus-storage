@@ -181,23 +181,28 @@ object Storages {
       val absSourcePath       = filePath(name, sourceRelativePath, protectedDir = false)
       val absDestPath         = filePath(name, destRelativePath)
 
-      def fixPermissions(path: Path): F[Unit] =
+      def fixPermissions(path: Path): F[Either[PermissionsFixingFailed, Unit]] =
         if (config.fixerEnabled) {
           val absPath  = path.toAbsolutePath.normalize.toString
           val process  = Process(config.fixerCommand :+ absPath)
           val logger   = StringProcessLogger(config.fixerCommand, absPath)
           val exitCode = process ! logger
-          if (exitCode == 0) F.unit
-          else F.raiseError(PermissionsFixingFailed(absPath, logger.toString))
+          if (exitCode == 0) F.pure(Right(()))
+          else F.pure(Left(PermissionsFixingFailed(absPath, logger.toString)))
         } else {
-          F.unit
+          F.pure(Right(()))
+        }
+
+      def failOrComputeSize(fixPermsResult: Either[PermissionsFixingFailed, Unit], isDir: Boolean): F[RejOrAttributes] =
+        fixPermsResult match {
+          case Left(err) => F.raiseError(err)
+          case Right(_)  => computeSizeAndMove(isDir)
         }
 
       def computeSizeAndMove(isDir: Boolean): F[RejOrAttributes] = {
         lazy val mediaType = detectMediaType(absDestPath, isDir)
         size(absSourcePath).flatMap { computedSize =>
-          fixPermissions(absSourcePath) >>
-            F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
+          F.fromTry(Try(Files.createDirectories(absDestPath.getParent))) >>
             F.fromTry(Try(Files.move(absSourcePath, absDestPath, ATOMIC_MOVE))) >>
             F.pure(cache.asyncComputePut(absDestPath, digestConfig.algorithm)) >>
             F.pure(Right(FileAttributes(absDestPath.toAkkaUri, computedSize, Digest.empty, mediaType)))
@@ -212,24 +217,26 @@ object Storages {
           .runWith(Sink.last)
           .to[F]
 
-      if (!Files.exists(absSourcePath))
-        F.pure(Left(PathNotFound(name, sourceRelativePath)))
-      else if (!absSourcePath.descendantOf(bucketPath) || absSourcePath.descendantOf(bucketProtectedPath))
-        F.pure(Left(PathNotFound(name, sourceRelativePath)))
-      else if (!absDestPath.descendantOf(bucketProtectedPath))
-        F.raiseError(PathInvalid(name, destRelativePath))
-      else if (Files.exists(absDestPath))
-        F.pure(Left(PathAlreadyExists(name, destRelativePath)))
-      else if (Files.isSymbolicLink(absSourcePath) || containsHardLink(absSourcePath))
-        F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
-      else if (Files.isRegularFile(absSourcePath))
-        computeSizeAndMove(isDir = false)
-      else if (Files.isDirectory(absSourcePath))
-        dirContainsLink(absSourcePath).flatMap {
-          case true  => F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
-          case false => computeSizeAndMove(isDir = true)
-        }
-      else F.pure(Left(PathNotFound(name, sourceRelativePath)))
+      fixPermissions(absSourcePath).flatMap { fixPermsResult =>
+        if (!Files.exists(absSourcePath))
+          F.pure(Left(PathNotFound(name, sourceRelativePath)))
+        else if (!absSourcePath.descendantOf(bucketPath) || absSourcePath.descendantOf(bucketProtectedPath))
+          F.pure(Left(PathNotFound(name, sourceRelativePath)))
+        else if (!absDestPath.descendantOf(bucketProtectedPath))
+          F.raiseError(PathInvalid(name, destRelativePath))
+        else if (Files.exists(absDestPath))
+          F.pure(Left(PathAlreadyExists(name, destRelativePath)))
+        else if (Files.isSymbolicLink(absSourcePath) || containsHardLink(absSourcePath))
+          F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
+        else if (Files.isRegularFile(absSourcePath))
+          failOrComputeSize(fixPermsResult, isDir = false)
+        else if (Files.isDirectory(absSourcePath))
+          dirContainsLink(absSourcePath).flatMap {
+            case true  => F.pure(Left(PathContainsLinks(name, sourceRelativePath)))
+            case false => failOrComputeSize(fixPermsResult, isDir = true)
+          }
+        else F.pure(Left(PathNotFound(name, sourceRelativePath)))
+      }
     }
 
     def getFile(
