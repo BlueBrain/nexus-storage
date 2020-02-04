@@ -1,7 +1,7 @@
 package ch.epfl.bluebrain.nexus.storage
 
 import akka.http.scaladsl.model.{ContentType, Uri}
-import ch.epfl.bluebrain.nexus.rdf.syntax._
+import ch.epfl.bluebrain.nexus.rdf.implicits._
 import ch.epfl.bluebrain.nexus.storage.config.Contexts.resourceCtxUri
 import com.github.ghik.silencer.silent
 import io.circe.generic.extras.Configuration

@@ -32,7 +32,7 @@ import io.circe.Json
 import monix.eval.Task
 import org.mockito.{ArgumentMatchersSugar, IdiomaticMockito}
 import org.scalatest.concurrent.ScalaFutures
-import ch.epfl.bluebrain.nexus.rdf.syntax._
+import ch.epfl.bluebrain.nexus.rdf.implicits._
 import org.scalatest.OptionValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
@@ -61,7 +61,7 @@ class StorageRoutesSpec
 
   trait Ctx {
     val name                     = genString()
-    val resourceCtx: AbsoluteIri = url"https://bluebrain.github.io/nexus/contexts/resource.json".value
+    val resourceCtx: AbsoluteIri = url"https://bluebrain.github.io/nexus/contexts/resource.json"
   }
 
   trait RandomFile extends Ctx {
