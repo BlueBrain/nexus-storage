@@ -17,7 +17,7 @@ import cats.effect.implicits._
 import ch.epfl.bluebrain.nexus.commons.http.HttpClient
 import ch.epfl.bluebrain.nexus.commons.http.HttpClient._
 import ch.epfl.bluebrain.nexus.commons.http.JsonLdCirceSupport._
-import ch.epfl.bluebrain.nexus.commons.rdf.syntax._
+import ch.epfl.bluebrain.nexus.rdf.implicits._
 import ch.epfl.bluebrain.nexus.iam.client.IamClientError.{Forbidden, Unauthorized}
 import ch.epfl.bluebrain.nexus.iam.client.types._
 import ch.epfl.bluebrain.nexus.storage.client.StorageClient._
@@ -45,7 +45,7 @@ class StorageClient[F[_]] private[client] (
     * Fetches the service description information (name and version)
     */
   def serviceDescription: F[ServiceDescription] =
-    serviceDesc(Get(config.iri.toAkkaUri))
+    serviceDesc(Get(config.iri.asAkka))
 
   /**
     * Checks that the provided storage bucket exists and it is readable/writable.
@@ -54,7 +54,7 @@ class StorageClient[F[_]] private[client] (
     */
   def exists(name: String)(implicit cred: Option[AuthToken]): F[Boolean] = {
     val endpoint = config.buckets + name
-    emptyBody(Head(endpoint.toAkkaUri).withCredentials).map(_ => true).recoverWith {
+    emptyBody(Head(endpoint.asAkka).withCredentials).map(_ => true).recoverWith {
       case _: NotFound => F.pure(false)
     }
   }
@@ -70,11 +70,11 @@ class StorageClient[F[_]] private[client] (
   def createFile(name: String, relativePath: Uri.Path, source: AkkaSource)(
       implicit cred: Option[AuthToken]
   ): F[FileAttributes] = {
-    val endpoint       = config.files(name) + slashIfNone(relativePath).toIriPath
+    val endpoint       = config.files(name) + slashIfNone(relativePath).asIriPath
     val bodyPartEntity = HttpEntity.IndefiniteLength(ContentTypes.`application/octet-stream`, source)
     val filename       = extractName(relativePath).getOrElse("myfile")
     val multipartForm  = FormData(BodyPart("file", bodyPartEntity, Map("filename" -> filename))).toEntity()
-    attributes(Put(endpoint.toAkkaUri, multipartForm).withCredentials).recoverWith {
+    attributes(Put(endpoint.asAkka, multipartForm).withCredentials).recoverWith {
       case EmptyChunk => createFile(name, relativePath, Source.empty)
       case ex         => F.raiseError(ex)
     }
@@ -94,8 +94,8 @@ class StorageClient[F[_]] private[client] (
     * @return The source wrapped on the effect type F[]
     */
   def getFile(name: String, relativePath: Uri.Path)(implicit cred: Option[AuthToken]): F[AkkaSource] = {
-    val endpoint = config.files(name) + slashIfNone(relativePath).toIriPath
-    val request  = Get(endpoint.toAkkaUri).withCredentials
+    val endpoint = config.files(name) + slashIfNone(relativePath).asIriPath
+    val request  = Get(endpoint.asAkka).withCredentials
     F.pure {
       Source.single(request).mapAsync(1)(source(_).toIO.unsafeToFuture()).flatMapConcat(identity)
     }
@@ -108,8 +108,8 @@ class StorageClient[F[_]] private[client] (
     * @param relativePath the relative path to the file location
     */
   def getAttributes(name: String, relativePath: Uri.Path)(implicit cred: Option[AuthToken]): F[FileAttributes] = {
-    val endpoint = config.attributes(name) + slashIfNone(relativePath).toIriPath
-    attributes(Get(endpoint.toAkkaUri).withCredentials)
+    val endpoint = config.attributes(name) + slashIfNone(relativePath).asIriPath
+    attributes(Get(endpoint.asAkka).withCredentials)
   }
 
   /**
@@ -123,7 +123,7 @@ class StorageClient[F[_]] private[client] (
   def moveFile(name: String, sourceRelativePath: Uri.Path, destRelativePath: Uri.Path)(
       implicit cred: Option[AuthToken]
   ): F[FileAttributes] = {
-    val endpoint = (config.files(name) + slashIfNone(destRelativePath).toIriPath).toAkkaUri
+    val endpoint = (config.files(name) + slashIfNone(destRelativePath).asIriPath).asAkka
     attributes(Put(endpoint, LinkFile(sourceRelativePath)).withCredentials)
   }
 

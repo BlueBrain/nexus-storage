@@ -17,7 +17,7 @@ import ch.epfl.bluebrain.nexus.commons.test.io.IOOptionValues
 import ch.epfl.bluebrain.nexus.commons.test.{EitherValues, Randomness, Resources}
 import ch.epfl.bluebrain.nexus.iam.client.IamClientError
 import ch.epfl.bluebrain.nexus.iam.client.types.AuthToken
-import ch.epfl.bluebrain.nexus.rdf.syntax._
+import ch.epfl.bluebrain.nexus.rdf.implicits._
 import ch.epfl.bluebrain.nexus.storage.client.StorageClient.AkkaSource
 import ch.epfl.bluebrain.nexus.storage.client.StorageClientError._
 import ch.epfl.bluebrain.nexus.storage.client.config.StorageClientConfig
@@ -53,7 +53,7 @@ class StorageClientSpec
 
   implicit val ec: ExecutionContext = system.dispatcher
 
-  private val config = StorageClientConfig(url"https://nexus.example.com".value, "v1")
+  private val config = StorageClientConfig(url"https://nexus.example.com", "v1")
   private val token  = OAuth2BearerToken("token")
 
   private implicit val attributesClient: HttpClient[IO, FileAttributes]   = mock[HttpClient[IO, FileAttributes]]
